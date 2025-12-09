@@ -55,7 +55,7 @@ export const createAlertsQuery = (groupedAlertsValues) => {
         .join(', ');
 
       // Construct the query string for each grouped alert
-      return `(ALERTS{${alertParts}} + on () group_left (component, layer) (absent(meta{layer="${query.layer}", component="${query.component}"})))`;
+      return `ALERTS{${alertParts}}`;
     })
     .join(' or '); // Join all individual alert queries with "or"
 
