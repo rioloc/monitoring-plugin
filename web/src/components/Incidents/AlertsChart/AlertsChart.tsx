@@ -41,14 +41,7 @@ import { MonitoringState } from '../../../store/store';
 import { isEmpty } from 'lodash-es';
 import { DataTestIDs } from '../../data-test';
 
-const AlertsChart = ({ 
-  theme,
-  timespan,
-}: 
-  { 
-    theme: 'light' | 'dark';
-    timespan: number;
-}) => {
+const AlertsChart = ({ theme, timespan }: { theme: 'light' | 'dark'; timespan: number }) => {
   const dispatch = useDispatch();
   const [chartContainerHeight, setChartContainerHeight] = useState<number>();
   const [chartHeight, setChartHeight] = useState<number>();
@@ -80,7 +73,7 @@ const AlertsChart = ({
   const chartData: AlertsChartBar[][] = useMemo(() => {
     if (!Array.isArray(alertsData) || alertsData.length === 0) return [];
     return alertsData.map((alert) => createAlertsChartBars(alert, timespan));
-  }, [alertsData]);
+  }, [alertsData, timespan]);
 
   useEffect(() => {
     setChartContainerHeight(chartData?.length < 5 ? 300 : chartData?.length * 60);

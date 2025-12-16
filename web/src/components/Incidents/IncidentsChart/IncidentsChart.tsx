@@ -98,7 +98,7 @@ const IncidentsChart = ({
 
     // Reassign consecutive x values to eliminate gaps between bars
     return chartBars.map((bars, index) => bars.map((bar) => ({ ...bar, x: index + 1 })));
-  }, [incidentsData, dateValues, selectedGroupId]);
+  }, [incidentsData, dateValues, selectedGroupId, timespan]);
 
   useEffect(() => {
     setIsLoading(false);
