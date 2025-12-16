@@ -2,7 +2,7 @@
 
 import { PrometheusEndpoint, PrometheusResponse } from '@openshift-console/dynamic-plugin-sdk';
 import { getPrometheusBasePath, buildPrometheusUrl } from '../utils';
-import { PROMETHEUS_QUERY_INTERVAL_SECONDS } from './utils';
+import { getPrometheusQueryIntervalSeconds } from './utils';
 
 const MAX_URL_LENGTH = 2048;
 
@@ -100,10 +100,14 @@ export const fetchDataForIncidentsAndAlerts = async (
   fetch: (url: string) => Promise<PrometheusResponse>,
   range: { endTime: number; duration: number },
   customQuery: string | string[],
+  timespan: number,
 ) => {
   // Calculate samples to ensure step=PROMETHEUS_QUERY_INTERVAL_SECONDS (300s / 5 minutes)
   // For 24h duration: Math.ceil(86400000 / 288 / 1000) = 300 seconds
-  const samples = Math.floor(range.duration / (PROMETHEUS_QUERY_INTERVAL_SECONDS * 1000));
+
+  const interval = getPrometheusQueryIntervalSeconds(timespan);
+  const samples = Math.floor(range.duration / (interval * 1000));
+
   const queries = Array.isArray(customQuery) ? customQuery : [customQuery];
 
   const promises = queries.map((query) => {

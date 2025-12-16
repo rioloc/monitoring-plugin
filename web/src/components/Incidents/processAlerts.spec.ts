@@ -9,7 +9,7 @@ describe('convertToAlerts', () => {
 
   describe('edge cases', () => {
     it('should return empty array when no prometheus results provided', () => {
-      const result = convertToAlerts([], [], now);
+      const result = convertToAlerts([], [], now, 86400000);
       expect(result).toEqual([]);
     });
 
@@ -28,7 +28,7 @@ describe('convertToAlerts', () => {
           values: [[nowSeconds, '1']],
         },
       ];
-      const result = convertToAlerts(prometheusResults, [], now);
+      const result = convertToAlerts(prometheusResults, [], now, 86400000);
       expect(result).toEqual([]);
     });
 
@@ -69,7 +69,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].alertname).toBe('ClusterOperatorDegraded');
     });
@@ -113,7 +113,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
       // Should include values within incident time + 30s padding
       // Plus padding points added by insertPaddingPointsForChart
@@ -148,7 +148,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toEqual([]);
     });
   });
@@ -182,7 +182,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
 
       // Verify resolved is determined from ORIGINAL values (before padding)
@@ -226,7 +226,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].alertsStartFiring).toBeGreaterThan(0);
       expect(result[0].alertsEndFiring).toBeGreaterThan(0);
@@ -268,7 +268,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].alertstate).toBe('resolved');
       expect(result[0].resolved).toBe(true);
@@ -304,7 +304,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 3600000);
       expect(result).toHaveLength(1);
       expect(result[0].alertstate).toBe('firing');
       expect(result[0].resolved).toBe(false);
@@ -357,7 +357,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(2);
       expect(result[0].alertname).toBe('Alert1'); // Earlier alert first
       expect(result[1].alertname).toBe('Alert2');
@@ -408,7 +408,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(2);
       expect(result[0].x).toBe(2); // Earliest alert has highest x
       expect(result[1].x).toBe(1); // Latest alert has lowest x
@@ -443,7 +443,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].silenced).toBe(true);
     });
@@ -489,7 +489,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
       // Should use the silenced value from the latest timestamp
       expect(result[0].silenced).toBe(true);
@@ -523,7 +523,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].alertname).toBe('MyAlert');
       expect(result[0].namespace).toBe('my-namespace');

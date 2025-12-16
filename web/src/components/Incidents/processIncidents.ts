@@ -2,7 +2,12 @@
 
 import { PrometheusLabels, PrometheusResult } from '@openshift-console/dynamic-plugin-sdk';
 import { Incident, Metric, ProcessedIncident } from './model';
-import { insertPaddingPointsForChart, isResolved, sortByEarliestTimestamp } from './utils';
+import {
+  getPrometheusQueryIntervalSeconds,
+  insertPaddingPointsForChart,
+  isResolved,
+  sortByEarliestTimestamp,
+} from './utils';
 
 /**
  * Converts Prometheus results into processed incidents, filtering out Watchdog incidents.
@@ -16,7 +21,9 @@ import { insertPaddingPointsForChart, isResolved, sortByEarliestTimestamp } from
 export function convertToIncidents(
   prometheusResults: PrometheusResult[],
   currentTime: number,
+  timespan: number,
 ): ProcessedIncident[] {
+  const interval = getPrometheusQueryIntervalSeconds(timespan);
   const incidents = getIncidents(prometheusResults).filter(
     (incident) => incident.metric.src_alertname !== 'Watchdog',
   );
@@ -26,10 +33,10 @@ export function convertToIncidents(
     // Determine resolved status based on original values before padding
     const sortedValues = incident.values.sort((a, b) => a[0] - b[0]);
     const lastTimestamp = sortedValues[sortedValues.length - 1][0];
-    const resolved = isResolved(lastTimestamp, currentTime);
+    const resolved = isResolved(lastTimestamp, currentTime, interval);
 
     // Add padding points for chart rendering
-    const paddedValues = insertPaddingPointsForChart(sortedValues, currentTime);
+    const paddedValues = insertPaddingPointsForChart(sortedValues, currentTime, interval);
 
     const srcProperties = getSrcProperties(incident.metric);
 

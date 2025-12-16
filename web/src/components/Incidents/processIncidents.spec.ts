@@ -13,7 +13,7 @@ describe('convertToIncidents', () => {
 
   describe('edge cases', () => {
     it('should return empty array when no data provided', () => {
-      const result = convertToIncidents([], now);
+      const result = convertToIncidents([], now, 86400000);
       expect(result).toEqual([]);
     });
 
@@ -43,7 +43,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].src_alertname).toBe('ClusterOperatorDegraded');
     });
@@ -67,7 +67,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
 
       // Verify resolved is determined from ORIGINAL values (before padding)
@@ -99,7 +99,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].firing).toBe(true);
       expect(result[0].resolved).toBe(false);
@@ -122,7 +122,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].firing).toBe(false);
       expect(result[0].resolved).toBe(true);
@@ -145,7 +145,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].firing).toBe(false); // >= 10 minutes is resolved
       expect(result[0].resolved).toBe(true);
@@ -179,7 +179,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(2);
       expect(result[0].group_id).toBe('incident1'); // Earliest first
       expect(result[1].group_id).toBe('incident2');
@@ -211,7 +211,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(2);
       expect(result[0].x).toBe(2); // Earliest has highest x
       expect(result[1].x).toBe(1); // Latest has lowest x
@@ -234,7 +234,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].src_alertname).toBe('TestAlert');
       expect(result[0].src_namespace).toBe('test-namespace');
@@ -254,7 +254,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].src_alertname).toBe('TestAlert');
       // Only src_ properties should be extracted
@@ -280,7 +280,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       // insertPaddingPointsForChart adds a point 5 minutes before and after the point
       // After padding is added because now >= timestamp + 300 (since timestamp = nowSeconds - 600)
@@ -307,7 +307,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 86400000);
       expect(result).toHaveLength(1);
       expect(result[0].component).toBe('test-component');
       // componentList is created by getIncidents

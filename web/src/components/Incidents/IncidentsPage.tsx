@@ -233,6 +233,7 @@ const IncidentsPage = () => {
             safeFetch,
             range,
             createAlertsQuery(incidentForAlertProcessing),
+            daysSpan,
           );
           return response.data.result;
         }),
@@ -245,6 +246,7 @@ const IncidentsPage = () => {
                 prometheusResults,
                 incidentForAlertProcessing,
                 currentTime,
+                daysSpan,
               ),
             }),
           );
@@ -294,13 +296,18 @@ const IncidentsPage = () => {
 
     Promise.all(
       calculatedTimeRanges.map(async (range) => {
-        const response = await fetchDataForIncidentsAndAlerts(safeFetch, range, incidentsQuery);
+        const response = await fetchDataForIncidentsAndAlerts(
+          safeFetch,
+          range,
+          incidentsQuery,
+          daysSpan,
+        );
         return response.data.result;
       }),
     )
       .then((results) => {
         const prometheusResults = results.flat();
-        const incidents = convertToIncidents(prometheusResults, currentTime);
+        const incidents = convertToIncidents(prometheusResults, currentTime, daysSpan);
 
         // Update the raw, unfiltered incidents state
         dispatch(setIncidents({ incidents }));
@@ -610,10 +617,11 @@ const IncidentsPage = () => {
                     onIncidentClick={handleIncidentChartClick}
                     currentTime={incidentsLastRefreshTime}
                     lastRefreshTime={incidentsLastRefreshTime}
+                    timespan={daysSpan}
                   />
                 </StackItem>
                 <StackItem>
-                  <AlertsChart theme={theme} />
+                  <AlertsChart theme={theme} timespan={daysSpan} />
                 </StackItem>
               </>
             )}

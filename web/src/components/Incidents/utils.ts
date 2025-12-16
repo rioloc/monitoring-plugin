@@ -19,17 +19,27 @@ import {
   Timestamps,
 } from './model';
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
  * The Prometheus query step interval in seconds.
  *
  * All time-related operations are aligned to this interval:
- * - Prometheus queries use step=300 (calculated from samples=288 for 24h timespan)
+ * - Prometheus queries use step=getPrometheusQueryIntervalSeconds(timespan)
  * - Current time is rounded to 5-minute boundaries
- * - Resolved threshold is 10 minutes (2x query interval)
+ * - Resolved threshold is 2xquery itnerval minutes (2x query interval)
  * - Chart padding points are added 5 minutes before incidents
- * - Gap detection identifies gaps larger than 5 minutes
+ * - Gap detection identifies gaps larger than getPrometheusQueryIntervalSeconds minutes
  */
 export const PROMETHEUS_QUERY_INTERVAL_SECONDS = 300; // 5 minutes
+const PROMETHEUS_QUERY_INTERVAL_MULTIPLIER = 6;
+
+export const getPrometheusQueryIntervalSeconds = (timespan: number): number => {
+  if (timespan >= 15 * ONE_DAY_MS) {
+    return PROMETHEUS_QUERY_INTERVAL_MULTIPLIER * PROMETHEUS_QUERY_INTERVAL_SECONDS;
+  }
+  return PROMETHEUS_QUERY_INTERVAL_SECONDS;
+};
 
 /**
  * Returns the current time in milliseconds, rounded down to the nearest query interval.
@@ -66,9 +76,13 @@ export const getCurrentTime = (): number => {
  * @param currentTime - The current time in milliseconds (JavaScript Date.now() format)
  * @returns true if resolved (last data point >= 2x query interval old), false if still firing
  */
-export const isResolved = (lastTimestamp: number, currentTime: number): boolean => {
+export const isResolved = (
+  lastTimestamp: number,
+  currentTime: number,
+  interval: number,
+): boolean => {
   const delta = currentTime - lastTimestamp * 1000;
-  const threshold = 2 * PROMETHEUS_QUERY_INTERVAL_SECONDS * 1000;
+  const threshold = 2 * interval * 1000;
   return delta >= threshold;
 };
 
@@ -89,13 +103,13 @@ export const isResolved = (lastTimestamp: number, currentTime: number): boolean 
 export function insertPaddingPointsForChart(
   values: Array<[number, string]>,
   currentTime: number,
+  interval: number,
 ): Array<[number, string]> {
   if (values.length === 0) {
     return values;
   }
-
   const result: Array<[number, string]> = [];
-  const threshold = PROMETHEUS_QUERY_INTERVAL_SECONDS + 1;
+  const threshold = interval + 1;
   const currentTimeSeconds = currentTime / 1000;
 
   for (let i = 0; i < values.length; i++) {
@@ -107,7 +121,7 @@ export function insertPaddingPointsForChart(
     // - This is the first item (no previous item)
     // - This is the first item of a continuous sequence (gap with previous point > interval)
     if (!previous || current[0] - previous[0] > threshold) {
-      const timestamp = current[0] - PROMETHEUS_QUERY_INTERVAL_SECONDS;
+      const timestamp = current[0] - interval;
       const severity = current[1];
       result.push([timestamp, severity]);
     }
@@ -120,12 +134,12 @@ export function insertPaddingPointsForChart(
     const isLastItem = !next;
     const hasGapWithNext = next && next[0] - current[0] > threshold;
 
-    if (isLastItem && currentTimeSeconds >= current[0] + PROMETHEUS_QUERY_INTERVAL_SECONDS) {
-      const timestamp = current[0] + PROMETHEUS_QUERY_INTERVAL_SECONDS;
+    if (isLastItem && currentTimeSeconds >= current[0] + interval) {
+      const timestamp = current[0] + interval;
       const severity = current[1];
       result.push([timestamp, severity]);
     } else if (hasGapWithNext) {
-      const timestamp = current[0] + PROMETHEUS_QUERY_INTERVAL_SECONDS;
+      const timestamp = current[0] + interval;
       const severity = current[1];
       result.push([timestamp, severity]);
     }
@@ -147,10 +161,10 @@ export function sortByEarliestTimestamp(items: PrometheusResult[]): PrometheusRe
   });
 }
 
-function consolidateAndMergeIntervals(data: Incident, dateArray: SpanDates) {
+function consolidateAndMergeIntervals(data: Incident, dateArray: SpanDates, interval: number) {
   const severityRank = { 2: 2, 1: 1, 0: 0 };
   const filteredValues = filterAndSortValues(data, severityRank);
-  return generateIntervalsWithGaps(filteredValues, dateArray);
+  return generateIntervalsWithGaps(filteredValues, dateArray, interval);
 }
 
 /**
@@ -189,7 +203,11 @@ function filterAndSortValues(
  * @param {string[]} dateArray - The array defining the start and end boundaries.
  * @returns {Array} - The list of consolidated intervals.
  */
-function generateIntervalsWithGaps(filteredValues: Array<Timestamps>, dateArray: SpanDates) {
+function generateIntervalsWithGaps(
+  filteredValues: Array<Timestamps>,
+  dateArray: SpanDates,
+  interval: number,
+) {
   const intervals: [number, number, string][] = [];
   const startBoundary = dateArray[0];
   const endBoundary = dateArray[dateArray.length - 1];
@@ -210,7 +228,7 @@ function generateIntervalsWithGaps(filteredValues: Array<Timestamps>, dateArray:
   for (let i = 0; i < filteredValues.length; i++) {
     const [timestamp, severity] = filteredValues[i];
 
-    if (i > 0 && hasGap(filteredValues, i)) {
+    if (i > 0 && hasGap(filteredValues, i, interval)) {
       intervals.push(createNodataInterval(filteredValues, i));
     }
 
@@ -240,11 +258,11 @@ function generateIntervalsWithGaps(filteredValues: Array<Timestamps>, dateArray:
  * @param {number} index - The current index in the array.
  * @returns {boolean} - Whether a gap exists.
  */
-function hasGap(filteredValues: Array<Timestamps>, index: number) {
+function hasGap(filteredValues: Array<Timestamps>, index: number, interval: number) {
   const previousTimestamp = filteredValues[index - 1][0];
   const currentTimestamp = filteredValues[index][0];
   const gapMinutes = (currentTimestamp - previousTimestamp) / 60;
-  return gapMinutes > PROMETHEUS_QUERY_INTERVAL_SECONDS / 60;
+  return gapMinutes > interval / 60;
 }
 
 /**
@@ -269,8 +287,13 @@ function createNodataInterval(
  * @param {Object} incident - The incident data containing values with timestamps and severity levels.
  * @returns {Array} - An array of incident objects with `y0`, `y`, `x`, and `name` fields representing the bars for the chart.
  */
-export const createIncidentsChartBars = (incident: Incident, dateArray: SpanDates) => {
-  const groupedData = consolidateAndMergeIntervals(incident, dateArray);
+export const createIncidentsChartBars = (
+  incident: Incident,
+  dateArray: SpanDates,
+  timespan: number,
+) => {
+  const interval = getPrometheusQueryIntervalSeconds(timespan);
+  const groupedData = consolidateAndMergeIntervals(incident, dateArray, interval);
 
   const data: {
     y0: Date;
@@ -317,7 +340,8 @@ export const createIncidentsChartBars = (incident: Incident, dateArray: SpanDate
   return data;
 };
 
-function consolidateAndMergeAlertIntervals(data: Alert) {
+function consolidateAndMergeAlertIntervals(data: Alert, timespan: number) {
+  const interval = getPrometheusQueryIntervalSeconds(timespan);
   if (!data.values || data.values.length === 0) {
     return [];
   }
@@ -333,7 +357,7 @@ function consolidateAndMergeAlertIntervals(data: Alert) {
     const currentTimestamp = sortedValues[i][0];
     const timeDifference = (currentTimestamp - previousTimestamp) / 60; // Convert to minutes
 
-    if (timeDifference > 5) {
+    if (timeDifference > interval / 60) {
       intervals.push([currentStart, sortedValues[i - 1][0], 'data']);
       intervals.push([previousTimestamp + 1, currentTimestamp - 1, 'nodata']);
       currentStart = sortedValues[i][0];
@@ -350,8 +374,11 @@ function consolidateAndMergeAlertIntervals(data: Alert) {
   return intervals;
 }
 
-export const createAlertsChartBars = (alert: IncidentsDetailsAlert): AlertsChartBar[] => {
-  const groupedData = consolidateAndMergeAlertIntervals(alert);
+export const createAlertsChartBars = (
+  alert: IncidentsDetailsAlert,
+  timespan: number,
+): AlertsChartBar[] => {
+  const groupedData = consolidateAndMergeAlertIntervals(alert, timespan);
   const barChartColorScheme = {
     critical: t_global_color_status_danger_default.var,
     info: t_global_color_status_info_default.var,

@@ -62,6 +62,7 @@ const IncidentsChart = ({
   onIncidentClick,
   currentTime,
   lastRefreshTime,
+  timespan,
 }: {
   incidentsData: Array<Incident>;
   chartDays: number;
@@ -70,6 +71,7 @@ const IncidentsChart = ({
   onIncidentClick: (groupId: string) => void;
   currentTime: number;
   lastRefreshTime: number | null;
+  timespan: number;
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [chartContainerHeight, setChartContainerHeight] = useState<number>();
@@ -90,7 +92,7 @@ const IncidentsChart = ({
 
     // Create chart bars and sort by original x values to maintain proper order
     const chartBars = filteredIncidents.map((incident) =>
-      createIncidentsChartBars(incident, dateValues),
+      createIncidentsChartBars(incident, dateValues, timespan),
     );
     chartBars.sort((a, b) => a[0].x - b[0].x);
 

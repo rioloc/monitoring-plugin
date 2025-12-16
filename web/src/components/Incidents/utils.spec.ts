@@ -4,14 +4,14 @@ describe('insertPaddingPointsForChart', () => {
   describe('edge cases', () => {
     it('should return empty array when input is empty', () => {
       const currentTime = 2000 * 1000; // 2000 seconds in ms
-      const result = insertPaddingPointsForChart([], currentTime);
+      const result = insertPaddingPointsForChart([], currentTime, 300);
       expect(result).toEqual([]);
     });
 
     it('should handle a single data point without after padding when currentTime < item + interval', () => {
       const input: Array<[number, string]> = [[1000, 'critical']];
       const currentTime = 1200 * 1000; // 1200 seconds in ms (< 1000 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Should add padding point 5 minutes (300 seconds) before the single point
       // No after padding since currentTime < 1000 + 300
@@ -23,7 +23,7 @@ describe('insertPaddingPointsForChart', () => {
     it('should handle a single data point with after padding when currentTime >= item + interval', () => {
       const input: Array<[number, string]> = [[1000, 'critical']];
       const currentTime = 1300 * 1000; // 1300 seconds in ms (>= 1000 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Should add padding point before and after
       expect(result).toHaveLength(3);
@@ -41,7 +41,7 @@ describe('insertPaddingPointsForChart', () => {
         [1200, 'warning'], // 100 seconds later (< 5 min)
       ];
       const currentTime = 1500 * 1000; // 1500 seconds (>= 1200 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Should have 5 points: 1 padding before + 3 original + 1 padding after
       expect(result).toHaveLength(5);
@@ -59,7 +59,7 @@ describe('insertPaddingPointsForChart', () => {
         [1200, 'warning'], // 100 seconds later (< 5 min)
       ];
       const currentTime = 1400 * 1000; // 1400 seconds (< 1200 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Should have 4 points: 1 padding before + 3 original (no after padding)
       expect(result).toHaveLength(4);
@@ -75,7 +75,7 @@ describe('insertPaddingPointsForChart', () => {
         [1300, 'info'], // Exactly 300 seconds (5 minutes)
       ];
       const currentTime = 1600 * 1000; // 1600 seconds (>= 1300 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // At threshold (300s), should NOT create a gap
       // Should have before padding, 2 original points, and after padding
@@ -94,7 +94,7 @@ describe('insertPaddingPointsForChart', () => {
         [1500, 'critical'], // 500 seconds later (> 5 min threshold of 301s)
       ];
       const currentTime = 1800 * 1000; // 1800 seconds (>= 1500 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Should have: padding before first + first point + padding after first
       // + padding before second + second point + padding after second
@@ -113,7 +113,7 @@ describe('insertPaddingPointsForChart', () => {
         [1302, 'warning'], // 302 seconds later (> threshold of 301)
       ];
       const currentTime = 1602 * 1000; // 1602 seconds (>= 1302 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Should detect gap since it's > threshold (301s)
       expect(result).toHaveLength(6);
@@ -131,7 +131,7 @@ describe('insertPaddingPointsForChart', () => {
         [1301, 'warning'], // 301 seconds later (= threshold, not > threshold)
       ];
       const currentTime = 1601 * 1000; // 1601 seconds (>= 1301 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Should NOT detect gap since 301 is not > 301
       expect(result).toHaveLength(4);
@@ -149,7 +149,7 @@ describe('insertPaddingPointsForChart', () => {
         [3000, 'info'], // Gap of 900s
       ];
       const currentTime = 3300 * 1000; // 3300 seconds (>= 3000 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       expect(result).toHaveLength(10);
       expect(result[0]).toEqual([700, 'critical']); // Padding before first
@@ -172,7 +172,7 @@ describe('insertPaddingPointsForChart', () => {
         [2000, 'warning'],
       ];
       const currentTime = 2300 * 1000; // 2300 seconds (>= 2000 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Padding points should have same severity as the point they precede/follow
       expect(result[0][1]).toBe('critical'); // Padding before first critical
@@ -190,7 +190,7 @@ describe('insertPaddingPointsForChart', () => {
         [1200, '0'], // Info (numeric)
       ];
       const currentTime = 1500 * 1000; // 1500 seconds (>= 1200 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       expect(result[0]).toEqual([700, '2']); // Padding before first
       expect(result[1]).toEqual([1000, '2']);
@@ -211,7 +211,7 @@ describe('insertPaddingPointsForChart', () => {
         [3000, 'info'], // Gap (900s)
       ];
       const currentTime = 3300 * 1000; // 3300 seconds (>= 3000 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       expect(result).toHaveLength(12);
       expect(result[0]).toEqual([700, 'critical']); // Initial padding
@@ -234,7 +234,7 @@ describe('insertPaddingPointsForChart', () => {
         [1704067500, 'critical'], // 5 minutes later
       ];
       const currentTime = 1704067800 * 1000; // 5 minutes after last point
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       expect(result).toHaveLength(4);
       expect(result[0]).toEqual([1704066900, 'critical']); // 5 min before first
@@ -250,7 +250,7 @@ describe('insertPaddingPointsForChart', () => {
         [1200, 'info'],
       ];
       const currentTime = 1500 * 1000; // 1500 seconds (>= 1200 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       // Verify timestamps are in ascending order
       for (let i = 1; i < result.length; i++) {
@@ -263,7 +263,7 @@ describe('insertPaddingPointsForChart', () => {
     it('should handle points at minimum timestamp (0)', () => {
       const input: Array<[number, string]> = [[0, 'critical']];
       const currentTime = 300 * 1000; // 300 seconds (>= 0 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       expect(result).toHaveLength(3);
       expect(result[0]).toEqual([-300, 'critical']); // Negative timestamp is valid
@@ -277,7 +277,7 @@ describe('insertPaddingPointsForChart', () => {
         [1001, 'critical'], // 1 second apart
       ];
       const currentTime = 1301 * 1000; // 1301 seconds (>= 1001 + 300)
-      const result = insertPaddingPointsForChart(input, currentTime);
+      const result = insertPaddingPointsForChart(input, currentTime, 300);
 
       expect(result).toHaveLength(4);
       expect(result[0]).toEqual([700, 'critical']); // Padding before first

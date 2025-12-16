@@ -136,7 +136,7 @@ describe('fetchDataForIncidentsAndAlerts', () => {
       'ALERTS{alertname="test", severity="critical", namespace="test"}',
       'ALERTS{alertname="test2", severity="warning", namespace="test2"}',
     ];
-    const result = await fetchDataForIncidentsAndAlerts(fetch, range, customQuery);
+    const result = await fetchDataForIncidentsAndAlerts(fetch, range, customQuery, 86400000);
     expect(result).toEqual({
       status: 'success',
       data: {

@@ -5,7 +5,7 @@ import { Alert, GroupedAlert, Incident, Severity } from './model';
 import {
   insertPaddingPointsForChart,
   isResolved,
-  PROMETHEUS_QUERY_INTERVAL_SECONDS,
+  getPrometheusQueryIntervalSeconds,
 } from './utils';
 
 /**
@@ -202,7 +202,10 @@ export function convertToAlerts(
   prometheusResults: Array<PrometheusResult>,
   selectedIncidents: Array<Partial<Incident>>,
   currentTime: number,
+  timespan: number,
 ): Array<Alert> {
+  const interval = getPrometheusQueryIntervalSeconds(timespan);
+
   // Merge selected incidents by composite key. Consolidates duplicates caused by non-key labels
   // like `pod` or `silenced` that aren't supported by cluster health analyzer.
   const incidents = mergeIncidentsByKey(selectedIncidents);
@@ -221,7 +224,7 @@ export function convertToAlerts(
   const distinctAlerts = deduplicateAlerts(validAlerts);
 
   // Filter alerts to only include values within the incident's time window
-  const ALERT_WINDOW_PADDING_SECONDS = PROMETHEUS_QUERY_INTERVAL_SECONDS / 2;
+  const ALERT_WINDOW_PADDING_SECONDS = interval / 2;
 
   const alerts = distinctAlerts
     .map((alert: PrometheusResult): Alert | null => {
@@ -240,7 +243,7 @@ export function convertToAlerts(
       // Determine resolved status based on original values before padding
       const sortedValues = values.sort((a, b) => a[0] - b[0]);
       let lastTimestamp = sortedValues[sortedValues.length - 1][0];
-      const resolved = isResolved(lastTimestamp, currentTime);
+      const resolved = isResolved(lastTimestamp, currentTime, interval);
 
       // Find the associated incident, if it's one of the select ones
       // Since incidents are already merged by (group_id, src_alertname, src_namespace, src_severity),
@@ -258,7 +261,7 @@ export function convertToAlerts(
       }
 
       // Add padding points for chart rendering
-      const paddedValues = insertPaddingPointsForChart(sortedValues, currentTime);
+      const paddedValues = insertPaddingPointsForChart(sortedValues, currentTime, interval);
       const firstTimestamp = paddedValues[0][0];
       lastTimestamp = paddedValues[paddedValues.length - 1][0];
 
