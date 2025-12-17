@@ -44,6 +44,9 @@ export enum ActionType {
   SetFilteredIncidentsData = 'setFilteredIncidentsData',
   SetIncidentPageFilterType = 'setIncidentPageFilterType',
   SetIncidentsLastRefreshTime = 'setIncidentsLastRefreshTime',
+  SetTimeWindow = 'setTimeWindow',
+  SetTimeWindowFilteredIncidentsData = 'setTimeWindowFilteredIncidentsData',
+  SetTimeWindowFilteredAlertsData = 'setTimeWindowFilteredAlertsData',
 }
 
 export type Perspective = 'admin' | 'dev' | 'acm' | 'virtualization-perspective';
@@ -194,6 +197,15 @@ export const setIncidentPageFilterType = (filterTypeSelected) =>
 export const setIncidentsLastRefreshTime = (timestamp: number) =>
   action(ActionType.SetIncidentsLastRefreshTime, { timestamp });
 
+export const setTimeWindow = (timeWindow: number) =>
+  action(ActionType.SetTimeWindow, { timeWindow });
+
+export const setTimeWindowFilteredIncidentsData = (timeWindowFilteredIncidentsData) =>
+  action(ActionType.SetTimeWindowFilteredIncidentsData, timeWindowFilteredIncidentsData);
+
+export const setTimeWindowFilteredAlertsData = (timeWindowFilteredAlertsData) =>
+  action(ActionType.SetTimeWindowFilteredAlertsData, timeWindowFilteredAlertsData);
+
 type Actions = {
   AlertingSetErrored: typeof alertingSetErrored;
   AlertingSetLoading: typeof alertingSetLoading;
@@ -236,6 +248,9 @@ type Actions = {
   setFilteredIncidentsData: typeof setFilteredIncidentsData;
   setIncidentPageFilterType: typeof setIncidentPageFilterType;
   setIncidentsLastRefreshTime: typeof setIncidentsLastRefreshTime;
+  setTimeWindow: typeof setTimeWindow;
+  setTimeWindowFilteredIncidentsData: typeof setTimeWindowFilteredIncidentsData;
+  setTimeWindowFilteredAlertsData: typeof setTimeWindowFilteredAlertsData;
 };
 
 export type ObserveAction = Action<Actions>;

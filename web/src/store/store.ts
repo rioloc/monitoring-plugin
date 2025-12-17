@@ -33,6 +33,8 @@ export type ObserveState = {
     alertsData: Array<any>;
     alertsTableData: Array<any>;
     filteredIncidentsData: Array<any>;
+    timeWindowFilteredIncidentsData: Array<any>;
+    timeWindowFilteredAlertsData: Array<any>;
     alertsAreLoading: boolean;
     incidentsChartSelectedId: string;
     incidentsInitialState: {
@@ -49,6 +51,7 @@ export type ObserveState = {
     };
     incidentPageFilterType: string;
     incidentsLastRefreshTime: number | null;
+    timeWindow: number;
   };
   queryBrowser: {
     pollInterval: string | null;
@@ -80,6 +83,8 @@ export const defaultObserveState: ObserveState = {
     alertsData: [],
     alertsTableData: [],
     filteredIncidentsData: [],
+    timeWindowFilteredIncidentsData: [],
+    timeWindowFilteredAlertsData: [],
     alertsAreLoading: true,
     incidentsChartSelectedId: '',
     incidentsInitialState: {
@@ -96,6 +101,7 @@ export const defaultObserveState: ObserveState = {
     },
     incidentPageFilterType: 'Severity',
     incidentsLastRefreshTime: null,
+    timeWindow: 0,
   },
   alerting: {},
   hideGraphs: false,

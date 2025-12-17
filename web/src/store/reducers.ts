@@ -390,6 +390,23 @@ const monitoringReducer = produce((draft: ObserveState, action: ObserveAction): 
       break;
     }
 
+    case ActionType.SetTimeWindow: {
+      draft.incidentsData.timeWindow = action.payload.timeWindow;
+      break;
+    }
+
+    case ActionType.SetTimeWindowFilteredIncidentsData: {
+      draft.incidentsData.timeWindowFilteredIncidentsData =
+        action.payload.timeWindowFilteredIncidentsData;
+      break;
+    }
+
+    case ActionType.SetTimeWindowFilteredAlertsData: {
+      draft.incidentsData.timeWindowFilteredAlertsData =
+        action.payload.timeWindowFilteredAlertsData;
+      break;
+    }
+
     default:
       break;
   }

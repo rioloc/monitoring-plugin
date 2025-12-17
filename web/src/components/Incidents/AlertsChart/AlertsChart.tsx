@@ -45,8 +45,8 @@ const AlertsChart = ({ theme }: { theme: 'light' | 'dark' }) => {
   const dispatch = useDispatch();
   const [chartContainerHeight, setChartContainerHeight] = useState<number>();
   const [chartHeight, setChartHeight] = useState<number>();
-  const alertsData = useSelector(
-    (state: MonitoringState) => state.plugins.mcp.incidentsData.alertsData,
+  const timeWindowFilteredAlerts = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.timeWindowFilteredAlertsData,
   );
   const filteredData = useSelector(
     (state: MonitoringState) => state.plugins.mcp.incidentsData.filteredIncidentsData,
@@ -63,17 +63,17 @@ const AlertsChart = ({ theme }: { theme: 'light' | 'dark' }) => {
 
   // Use dynamic date range based on actual alerts data instead of fixed chartDays
   const dateValues = useMemo(() => {
-    if (!Array.isArray(alertsData) || alertsData.length === 0) {
+    if (!Array.isArray(timeWindowFilteredAlerts) || timeWindowFilteredAlerts.length === 0) {
       // Fallback to single day if no alerts data
       return generateDateArray(1, currentTime);
     }
-    return generateAlertsDateArray(alertsData, currentTime);
-  }, [alertsData, currentTime]);
+    return generateAlertsDateArray(timeWindowFilteredAlerts, currentTime);
+  }, [timeWindowFilteredAlerts, currentTime]);
 
   const chartData: AlertsChartBar[][] = useMemo(() => {
-    if (!Array.isArray(alertsData) || alertsData.length === 0) return [];
-    return alertsData.map((alert) => createAlertsChartBars(alert));
-  }, [alertsData]);
+    if (!Array.isArray(timeWindowFilteredAlerts) || timeWindowFilteredAlerts.length === 0) return [];
+    return timeWindowFilteredAlerts.map((alert) => createAlertsChartBars(alert));
+  }, [timeWindowFilteredAlerts]);
 
   useEffect(() => {
     setChartContainerHeight(chartData?.length < 5 ? 300 : chartData?.length * 55);

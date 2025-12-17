@@ -49,6 +49,9 @@ import {
   setIncidents,
   setIncidentsActiveFilters,
   setIncidentsLastRefreshTime,
+  setTimeWindow,
+  setTimeWindowFilteredIncidentsData,
+  setTimeWindowFilteredAlertsData,
 } from '../../store/actions';
 import { useLocation } from 'react-router-dom';
 import { changeDaysFilter } from './utils';
@@ -68,6 +71,7 @@ import { MonitoringProvider } from '../../contexts/MonitoringContext';
 import { isEmpty } from 'lodash-es';
 import { DataTestIDs } from '../data-test';
 import { DocumentTitle } from '@openshift-console/dynamic-plugin-sdk';
+import { filterIncidentsByTimeWindow, filterAlertsByTimeWindow } from './timeWindowFilters';
 
 const IncidentsPage = () => {
   const { t } = useTranslation(process.env.I18N_NAMESPACE);
@@ -142,6 +146,18 @@ const IncidentsPage = () => {
     (state: MonitoringState) => state.plugins.mcp.incidentsData.filteredIncidentsData,
   );
 
+  const timeWindow = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.timeWindow,
+  );
+
+  const timeWindowFilteredIncidents = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.timeWindowFilteredIncidentsData,
+  );
+
+  const timeWindowFilteredAlerts = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.timeWindowFilteredAlertsData,
+  );
+
   const selectedGroupId = incidentsActiveFilters.groupId?.[0] ?? undefined;
 
   const incidentPageFilterTypeSelected = useSelector(
@@ -198,13 +214,15 @@ const IncidentsPage = () => {
   useEffect(() => {
     dispatch(
       setFilteredIncidentsData({
-        filteredIncidentsData: filterIncident(incidentsActiveFilters, incidents),
+        filteredIncidentsData: filterIncident(incidentsActiveFilters, timeWindowFilteredIncidents),
       }),
     );
   }, [
     incidentsActiveFilters.state,
     incidentsActiveFilters.severity,
     incidentsActiveFilters.groupId,
+    timeWindowFilteredIncidents,
+    dispatch,
   ]);
 
   const safeFetch = useSafeFetch();
@@ -215,14 +233,40 @@ const IncidentsPage = () => {
   }, [daysSpan, selectedGroupId, incidentsLastRefreshTime]);
 
   useEffect(() => {
-    setDaysSpan(
-      parsePrometheusDuration(
-        incidentsActiveFilters.days.length > 0
-          ? incidentsActiveFilters.days[0].split(' ')[0] + 'd'
-          : '',
-      ),
+    const timeWindowMs = parsePrometheusDuration(
+      incidentsActiveFilters.days.length > 0
+        ? incidentsActiveFilters.days[0].split(' ')[0] + 'd'
+        : '',
     );
-  }, [incidentsActiveFilters.days]);
+    setDaysSpan(timeWindowMs);
+    dispatch(setTimeWindow(timeWindowMs));
+  }, [incidentsActiveFilters.days, dispatch]);
+
+  useEffect(() => {
+    if (incidentsLastRefreshTime && timeWindow > 0) {
+      const timeFilteredIncidents = filterIncidentsByTimeWindow(
+        incidents,
+        timeWindow,
+        incidentsLastRefreshTime,
+      );
+      dispatch(
+        setTimeWindowFilteredIncidentsData({
+          timeWindowFilteredIncidentsData: timeFilteredIncidents,
+        }),
+      );
+
+      const timeFilteredAlerts = filterAlertsByTimeWindow(
+        alertsData,
+        timeWindow,
+        incidentsLastRefreshTime,
+      );
+      dispatch(
+        setTimeWindowFilteredAlertsData({
+          timeWindowFilteredAlertsData: timeFilteredAlerts,
+        }),
+      );
+    }
+  }, [incidents, alertsData, timeWindow, incidentsLastRefreshTime, dispatch]);
 
   useEffect(() => {
     (async () => {
@@ -262,14 +306,14 @@ const IncidentsPage = () => {
   }, [incidentForAlertProcessing]);
 
   useEffect(() => {
-    if (rules && alertsData) {
+    if (rules && timeWindowFilteredAlerts && timeWindowFilteredAlerts.length >= 0) {
       dispatch(
         setAlertsTableData({
-          alertsTableData: groupAlertsForTable(alertsData, rules),
+          alertsTableData: groupAlertsForTable(timeWindowFilteredAlerts, rules),
         }),
       );
     }
-  }, [alertsData, rules]);
+  }, [timeWindowFilteredAlerts, rules, dispatch]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -305,10 +349,22 @@ const IncidentsPage = () => {
         // Update the raw, unfiltered incidents state
         dispatch(setIncidents({ incidents }));
 
+        // Apply time window filtering first, then user filters
+        const timeFilteredIncidents = filterIncidentsByTimeWindow(
+          incidents,
+          daysDuration,
+          currentTime,
+        );
+        dispatch(
+          setTimeWindowFilteredIncidentsData({
+            timeWindowFilteredIncidentsData: timeFilteredIncidents,
+          }),
+        );
+
         // Filter the incidents and dispatch
         dispatch(
           setFilteredIncidentsData({
-            filteredIncidentsData: filterIncident(incidentsActiveFilters, incidents),
+            filteredIncidentsData: filterIncident(incidentsActiveFilters, timeFilteredIncidents),
           }),
         );
 
