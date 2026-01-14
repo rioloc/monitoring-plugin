@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useSafeFetch } from '../console/utils/safe-fetch-hook';
-import { createAlertsQuery, fetchDataForIncidentsAndAlerts } from './api';
+import { createAlertsQuery, fetchDataForIncidentsAndAlerts, fetchInstantData } from './api';
 import { useTranslation } from 'react-i18next';
 import {
   Bullseye,
@@ -45,6 +45,7 @@ import {
   setAlertsData,
   setAlertsTableData,
   setFilteredIncidentsData,
+  setIncidentsTimestamps,
   setIncidentPageFilterType,
   setIncidents,
   setIncidentsActiveFilters,
@@ -137,6 +138,10 @@ const IncidentsPage = () => {
 
   const filteredData = useSelector(
     (state: MonitoringState) => state.plugins.mcp.incidentsData.filteredIncidentsData,
+  );
+
+  const incidentsTimestamps = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.incidentsTimestamps,
   );
 
   const selectedGroupId = incidentsActiveFilters.groupId?.[0] ?? undefined;
@@ -274,6 +279,31 @@ const IncidentsPage = () => {
     // Set refresh time before making queries
     const currentTime = getCurrentTime();
     dispatch(setIncidentsLastRefreshTime(currentTime));
+
+    // fetch incident timestamps
+    Promise.all(
+      [
+        'min_over_time(timestamp(cluster_health_components_map)[15d:5m])',
+        'last_over_time(timestamp(cluster_health_components_map)[15d:5m])',
+      ].map(async (query) => {
+        const response = await fetchInstantData(safeFetch, query);
+        return response.data.result;
+      }),
+    )
+      .then((results) => {
+        dispatch(
+          setIncidentsTimestamps({
+            incidentsTimestamps: {
+              minOverTime: results[0],
+              lastOverTime: results[1],
+            },
+          }),
+        );
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.log(err);
+      });
 
     const daysDuration = parsePrometheusDuration(
       incidentsActiveFilters.days.length > 0
@@ -599,6 +629,7 @@ const IncidentsPage = () => {
                 <StackItem>
                   <IncidentsChart
                     incidentsData={filteredData}
+                    incidentsTimestamps={incidentsTimestamps}
                     chartDays={timeRanges.length}
                     theme={theme}
                     selectedGroupId={selectedGroupId}
