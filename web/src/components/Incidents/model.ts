@@ -19,6 +19,13 @@ export type Incident = {
   x: number;
   values: Array<Timestamps>;
   metric: Metric;
+  first_timestamp: number;
+  last_timestamp: number;
+};
+
+export type IncidentsTimestamps = {
+  min_over_time: Array<any>;
+  last_over_time: Array<any>;
 };
 
 // Define the interface for Metric

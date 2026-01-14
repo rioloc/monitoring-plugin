@@ -281,6 +281,8 @@ export const createIncidentsChartBars = (incident: Incident, dateArray: SpanDate
     componentList: string[];
     group_id: string;
     nodata: boolean;
+    start_date: Date;
+    end_date: Date;
     fill: string;
   }[] = [];
   const getSeverityName = (value) => {
@@ -305,6 +307,8 @@ export const createIncidentsChartBars = (incident: Incident, dateArray: SpanDate
       componentList: incident.componentList || [],
       group_id: incident.group_id,
       nodata: groupedData[i][2] === 'nodata' ? true : false,
+      start_date: new Date(incident.first_timestamp * 1000),
+      end_date: new Date(incident.last_timestamp * 1000),
       fill:
         severity === 'Critical'
           ? barChartColorScheme.critical
