@@ -44,6 +44,7 @@ import {
   setAlertsAreLoading,
   setAlertsData,
   setAlertsTableData,
+  setAlertsTimestamps,
   setFilteredIncidentsData,
   setIncidentsTimestamps,
   setIncidentPageFilterType,
@@ -154,6 +155,10 @@ const IncidentsPage = () => {
     (state: MonitoringState) => state.plugins.mcp.incidentsData.incidentsLastRefreshTime,
   );
 
+  const alertsTimestamps = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.alertsTimestamps,
+  );
+
   const closeDropDownFilters = (): void => {
     setFiltersExpanded({
       severity: false,
@@ -229,6 +234,28 @@ const IncidentsPage = () => {
   useEffect(() => {
     (async () => {
       const currentTime = incidentsLastRefreshTime;
+
+      // fetch alerts timestamps
+      Promise.all(
+        ['min_over_time(timestamp(ALERTS{alertstate="firing"})[15d:5m])'].map(async (query) => {
+          const response = await fetchInstantData(safeFetch, query);
+          return response.data.result;
+        }),
+      )
+        .then((results) => {
+          dispatch(
+            setAlertsTimestamps({
+              alertsTimestamps: {
+                minOverTime: results[0],
+              },
+            }),
+          );
+        })
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.log(err);
+        });
+
       Promise.all(
         timeRanges.map(async (range) => {
           const response = await fetchDataForIncidentsAndAlerts(
@@ -245,6 +272,7 @@ const IncidentsPage = () => {
             prometheusResults,
             incidentForAlertProcessing,
             currentTime,
+            alertsTimestamps,
           );
           dispatch(
             setAlertsData({
@@ -282,10 +310,7 @@ const IncidentsPage = () => {
 
     // fetch incident timestamps
     Promise.all(
-      [
-        'min_over_time(timestamp(cluster_health_components_map)[15d:5m])',
-        'last_over_time(timestamp(cluster_health_components_map)[15d:5m])',
-      ].map(async (query) => {
+      ['min_over_time(timestamp(cluster_health_components_map)[15d:5m])'].map(async (query) => {
         const response = await fetchInstantData(safeFetch, query);
         return response.data.result;
       }),
@@ -295,7 +320,6 @@ const IncidentsPage = () => {
           setIncidentsTimestamps({
             incidentsTimestamps: {
               minOverTime: results[0],
-              lastOverTime: results[1],
             },
           }),
         );
@@ -340,7 +364,9 @@ const IncidentsPage = () => {
         setIncidentsAreLoading(false);
 
         if (isGroupSelected) {
-          setIncidentForAlertProcessing(processIncidentsForAlerts(prometheusResults));
+          setIncidentForAlertProcessing(
+            processIncidentsForAlerts(prometheusResults, incidentsTimestamps),
+          );
           dispatch(setAlertsAreLoading({ alertsAreLoading: true }));
         } else {
           closeDropDownFilters();
