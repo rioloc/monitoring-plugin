@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useSafeFetch } from '../console/utils/safe-fetch-hook';
-import { createAlertsQuery, fetchDataForIncidentsAndAlerts } from './api';
+import { createAlertsQuery, fetchDataForIncidentsAndAlerts, fetchInstantData } from './api';
 import { useTranslation } from 'react-i18next';
 import {
   Bullseye,
@@ -44,7 +44,9 @@ import {
   setAlertsAreLoading,
   setAlertsData,
   setAlertsTableData,
+  setAlertsTimestamps,
   setFilteredIncidentsData,
+  setIncidentsTimestamps,
   setIncidentPageFilterType,
   setIncidents,
   setIncidentsActiveFilters,
@@ -139,6 +141,10 @@ const IncidentsPage = () => {
     (state: MonitoringState) => state.plugins.mcp.incidentsData.filteredIncidentsData,
   );
 
+  const incidentsTimestamps = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.incidentsTimestamps,
+  );
+
   const selectedGroupId = incidentsActiveFilters.groupId?.[0] ?? undefined;
 
   const incidentPageFilterTypeSelected = useSelector(
@@ -147,6 +153,10 @@ const IncidentsPage = () => {
 
   const incidentsLastRefreshTime = useSelector(
     (state: MonitoringState) => state.plugins.mcp.incidentsData.incidentsLastRefreshTime,
+  );
+
+  const alertsTimestamps = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.alertsTimestamps,
   );
 
   const closeDropDownFilters = (): void => {
@@ -224,6 +234,28 @@ const IncidentsPage = () => {
   useEffect(() => {
     (async () => {
       const currentTime = incidentsLastRefreshTime;
+
+      // fetch alerts timestamps
+      Promise.all(
+        ['min_over_time(timestamp(ALERTS{alertstate="firing"})[15d:5m])'].map(async (query) => {
+          const response = await fetchInstantData(safeFetch, query);
+          return response.data.result;
+        }),
+      )
+        .then((results) => {
+          dispatch(
+            setAlertsTimestamps({
+              alertsTimestamps: {
+                minOverTime: results[0],
+              },
+            }),
+          );
+        })
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.log(err);
+        });
+
       Promise.all(
         timeRanges.map(async (range) => {
           const response = await fetchDataForIncidentsAndAlerts(
@@ -240,6 +272,7 @@ const IncidentsPage = () => {
             prometheusResults,
             incidentForAlertProcessing,
             currentTime,
+            alertsTimestamps,
           );
           dispatch(
             setAlertsData({
@@ -274,6 +307,27 @@ const IncidentsPage = () => {
     // Set refresh time before making queries
     const currentTime = getCurrentTime();
     dispatch(setIncidentsLastRefreshTime(currentTime));
+
+    // fetch incident timestamps
+    Promise.all(
+      ['min_over_time(timestamp(cluster_health_components_map)[15d:5m])'].map(async (query) => {
+        const response = await fetchInstantData(safeFetch, query);
+        return response.data.result;
+      }),
+    )
+      .then((results) => {
+        dispatch(
+          setIncidentsTimestamps({
+            incidentsTimestamps: {
+              minOverTime: results[0],
+            },
+          }),
+        );
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.log(err);
+      });
 
     const daysDuration = parsePrometheusDuration(
       incidentsActiveFilters.days.length > 0
@@ -310,7 +364,9 @@ const IncidentsPage = () => {
         setIncidentsAreLoading(false);
 
         if (isGroupSelected) {
-          setIncidentForAlertProcessing(processIncidentsForAlerts(prometheusResults));
+          setIncidentForAlertProcessing(
+            processIncidentsForAlerts(prometheusResults, incidentsTimestamps),
+          );
           dispatch(setAlertsAreLoading({ alertsAreLoading: true }));
         } else {
           closeDropDownFilters();
@@ -599,6 +655,7 @@ const IncidentsPage = () => {
                 <StackItem>
                   <IncidentsChart
                     incidentsData={filteredData}
+                    incidentsTimestamps={incidentsTimestamps}
                     chartDays={timeRanges.length}
                     theme={theme}
                     selectedGroupId={selectedGroupId}
