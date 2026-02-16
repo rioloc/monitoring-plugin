@@ -33,6 +33,7 @@ import {
   calculateIncidentsChartDomain,
   createIncidentsChartBars,
   generateDateArray,
+  roundDateToInterval,
 } from '../utils';
 import { dateTimeFormatter, timeFormatter } from '../../console/utils/datetime';
 import { useTranslation } from 'react-i18next';
@@ -88,9 +89,25 @@ const IncidentsChart = ({
       ? incidentsData.filter((incident) => incident.group_id === selectedGroupId)
       : incidentsData;
 
-    // Create chart bars and sort by original x values to maintain proper order
-    const chartBars = filteredIncidents.map((incident) =>
-      createIncidentsChartBars(incident, dateValues),
+    // Group incidents by group_id so split severity segments share the same row
+    const incidentsByGroupId = new Map<string, typeof filteredIncidents>();
+    for (const incident of filteredIncidents) {
+      const existing = incidentsByGroupId.get(incident.group_id);
+      if (existing) {
+        existing.push(incident);
+      } else {
+        incidentsByGroupId.set(incident.group_id, [incident]);
+      }
+    }
+
+    // TODO(rioloc): Edge case
+    // In order to visualize correct informations in the case of an incident
+    // changes severity. So it is displayed in an unique line
+    // the endDate should not contain the padding. So it should be 5 minutes less
+
+    // Create chart bars per group and sort by original x values
+    const chartBars = Array.from(incidentsByGroupId.values()).map((group) =>
+      createIncidentsChartBars(group, dateValues),
     );
     chartBars.sort((a, b) => a[0].x - b[0].x);
 
@@ -101,7 +118,6 @@ const IncidentsChart = ({
   useEffect(() => {
     setIsLoading(false);
   }, [incidentsData]);
-
   useEffect(() => {
     setChartContainerHeight(chartData?.length < 5 ? 300 : chartData?.length * 60);
     setChartHeight(chartData?.length < 5 ? 250 : chartData?.length * 55);
@@ -175,10 +191,12 @@ const IncidentsChart = ({
                     if (datum.nodata) {
                       return '';
                     }
-                    const startDate = dateTimeFormatter(i18n.language).format(new Date(datum.y0));
+                    const startDate = dateTimeFormatter(i18n.language).format(datum.startDate);
                     const endDate = datum.firing
                       ? '---'
-                      : dateTimeFormatter(i18n.language).format(new Date(datum.y));
+                      : dateTimeFormatter(i18n.language).format(
+                          roundDateToInterval(new Date(datum.y)),
+                        );
                     const components = formatComponentList(datum.componentList);
 
                     return `${t('Severity')}: ${t(datum.name)}

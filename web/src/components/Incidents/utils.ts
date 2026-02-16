@@ -14,10 +14,14 @@ import {
   DaysFilters,
   Incident,
   IncidentFiltersCombined,
-  IncidentsDetailsAlert,
   SpanDates,
   Timestamps,
 } from './model';
+
+/**
+ * Number of milliseconds in a day
+ */
+export const DAY_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 /**
  * The Prometheus query step interval in seconds.
@@ -52,6 +56,48 @@ export const getCurrentTime = (): number => {
   const now = Date.now();
   const intervalMs = PROMETHEUS_QUERY_INTERVAL_SECONDS * 1000;
   return Math.floor(now / intervalMs) * intervalMs;
+};
+
+/**
+ * Rounds a Date to the nearest 5-minute boundary for display purposes.
+ * This is used in tooltips to show cleaner, rounded timestamps instead of precise
+ * interval boundaries that may differ by seconds.
+ *
+ * For example:
+ * - 22:57:00 -> 22:55:00 (rounds down)
+ * - 22:59:00 -> 23:00:00 (rounds up)
+ * - 23:30:00 -> 23:30:00 (already at boundary)
+ * - 23:29:59 -> 23:30:00 (rounds up)
+ *
+ * @param date - The Date object to round
+ * @returns A new Date object rounded to the nearest 5-minute boundary
+ */
+export const roundDateToInterval = (date: Date): Date => {
+  const intervalMs = PROMETHEUS_QUERY_INTERVAL_SECONDS * 1000;
+  const roundedMs = Math.round(date.getTime() / intervalMs) * intervalMs;
+  return new Date(roundedMs);
+};
+
+/**
+ * Rounds a timestamp down to the nearest 5-minute boundary.
+ * This ensures consistent display of start dates in tooltips and tables,
+ * matching the rounding behavior of end dates which come from Prometheus data
+ * that is already aligned to 5-minute intervals.
+ *
+ * @param timestampSeconds - Timestamp in seconds (Prometheus format)
+ * @returns Timestamp in seconds, rounded down to the nearest 5-minute boundary
+ *
+ * @example
+ * roundTimestampToFiveMinutes(1704067200) // 1704067200 (already on boundary)
+ * roundTimestampToFiveMinutes(1704067230) // 1704067200 (rounded down)
+ * roundTimestampToFiveMinutes(1704067499) // 1704067200 (rounded down)
+ * roundTimestampToFiveMinutes(1704067500) // 1704067500 (on next boundary)
+ */
+export const roundTimestampToFiveMinutes = (timestampSeconds: number): number => {
+  return (
+    Math.floor(timestampSeconds / PROMETHEUS_QUERY_INTERVAL_SECONDS) *
+    PROMETHEUS_QUERY_INTERVAL_SECONDS
+  );
 };
 
 /**
@@ -264,13 +310,24 @@ function createNodataInterval(
 }
 
 /**
- * Creates an array of incident data for chart bars, ensuring that when two severities have the same time range, the lower severity is removed.
+ * Creates chart bar data for a group of incidents that share the same group_id.
+ * Each incident (potentially a different severity segment) produces its own bars,
+ * all sharing the same x position so they render on the same row.
+ * Each bar retains its own properties (severity, startDate, firing, etc.).
  *
- * @param {Object} incident - The incident data containing values with timestamps and severity levels.
- * @returns {Array} - An array of incident objects with `y0`, `y`, `x`, and `name` fields representing the bars for the chart.
+ * @param incidents - Array of incidents with the same group_id (split severity segments).
+ * @param dateArray - Array of span dates for interval calculation.
+ * @returns Flat array of bar objects for the chart, all sharing the same x.
  */
-export const createIncidentsChartBars = (incident: Incident, dateArray: SpanDates) => {
-  const groupedData = consolidateAndMergeIntervals(incident, dateArray);
+export const createIncidentsChartBars = (incidents: Incident[], dateArray: SpanDates) => {
+  const getSeverityName = (value) => {
+    return value === '2' ? 'Critical' : value === '1' ? 'Warning' : 'Info';
+  };
+  const barChartColorScheme = {
+    critical: t_global_color_status_danger_default.var,
+    info: t_global_color_status_info_default.var,
+    warning: t_global_color_status_warning_default.var,
+  };
 
   const data: {
     y0: Date;
@@ -281,67 +338,75 @@ export const createIncidentsChartBars = (incident: Incident, dateArray: SpanDate
     componentList: string[];
     group_id: string;
     nodata: boolean;
+    startDate: Date;
     fill: string;
   }[] = [];
-  const getSeverityName = (value) => {
-    return value === '2' ? 'Critical' : value === '1' ? 'Warning' : 'Info';
-  };
-  const barChartColorScheme = {
-    critical: t_global_color_status_danger_default.var,
-    info: t_global_color_status_info_default.var,
-    warning: t_global_color_status_warning_default.var,
-  };
 
-  for (let i = 0; i < groupedData.length; i++) {
-    const severity = getSeverityName(groupedData[i][2]);
-    const isLastElement = i === groupedData.length - 1;
+  for (const incident of incidents) {
+    const groupedData = consolidateAndMergeIntervals(incident, dateArray);
 
-    data.push({
-      y0: new Date(groupedData[i][0] * 1000),
-      y: new Date(groupedData[i][1] * 1000),
-      x: incident.x,
-      name: severity,
-      firing: isLastElement ? incident.firing : false,
-      componentList: incident.componentList || [],
-      group_id: incident.group_id,
-      nodata: groupedData[i][2] === 'nodata' ? true : false,
-      fill:
-        severity === 'Critical'
-          ? barChartColorScheme.critical
-          : severity === 'Warning'
-          ? barChartColorScheme.warning
-          : barChartColorScheme.info,
-    });
+    for (let i = 0; i < groupedData.length; i++) {
+      const severity = getSeverityName(groupedData[i][2]);
+      const isLastElement = i === groupedData.length - 1;
+
+      data.push({
+        y0: new Date(groupedData[i][0] * 1000),
+        y: new Date(groupedData[i][1] * 1000),
+        x: incident.x,
+        name: severity,
+        firing: isLastElement ? incident.firing : false,
+        componentList: incident.componentList || [],
+        group_id: incident.group_id,
+        nodata: groupedData[i][2] === 'nodata',
+        startDate: new Date(incident.firstTimestamp * 1000),
+        fill:
+          severity === 'Critical'
+            ? barChartColorScheme.critical
+            : severity === 'Warning'
+            ? barChartColorScheme.warning
+            : barChartColorScheme.info,
+      });
+    }
   }
 
   return data;
 };
 
-function consolidateAndMergeAlertIntervals(data: Alert) {
-  if (!data.values || data.values.length === 0) {
-    return [];
-  }
+function consolidateAndMergeAlertIntervals(alerts: Array<Alert>): Array<AlertsIntervalsArray> {
+  if (alerts.length === 0) return [];
 
-  // Spread the array items to prevent sorting the original array
-  const sortedValues = [...data.values].sort((a, b) => a[0] - b[0]);
+  // Tag each value with its source alert's firstTimestamp, then sort
+  const taggedValues = alerts.flatMap((alert) =>
+    alert.values.map((v) => ({ timestamp: v[0], firstTimestamp: alert.firstTimestamp })),
+  );
+
+  if (taggedValues.length === 0) return [];
+
+  const sorted = [...taggedValues].sort((a, b) => a.timestamp - b.timestamp);
 
   const intervals: Array<AlertsIntervalsArray> = [];
-  let currentStart = sortedValues[0][0];
+  let currentStart = sorted[0].timestamp;
+  let currentFirstTimestamp = sorted[0].firstTimestamp;
   let previousTimestamp = currentStart;
 
-  for (let i = 1; i < sortedValues.length; i++) {
-    const currentTimestamp = sortedValues[i][0];
-    const timeDifference = (currentTimestamp - previousTimestamp) / 60; // Convert to minutes
+  for (let i = 1; i < sorted.length; i++) {
+    const timeDifference = (sorted[i].timestamp - previousTimestamp) / 60; // Convert to minutes
 
     if (timeDifference > 5) {
-      intervals.push([currentStart, sortedValues[i - 1][0], 'data']);
-      intervals.push([previousTimestamp + 1, currentTimestamp - 1, 'nodata']);
-      currentStart = sortedValues[i][0];
+      intervals.push([currentStart, sorted[i - 1].timestamp, 'data', currentFirstTimestamp]);
+      intervals.push([previousTimestamp + 1, sorted[i].timestamp - 1, 'nodata']);
+      currentStart = sorted[i].timestamp;
+      currentFirstTimestamp = sorted[i].firstTimestamp;
     }
-    previousTimestamp = currentTimestamp;
+    previousTimestamp = sorted[i].timestamp;
   }
 
-  intervals.push([currentStart, sortedValues[sortedValues.length - 1][0], 'data']);
+  intervals.push([
+    currentStart,
+    sorted[sorted.length - 1].timestamp,
+    'data',
+    currentFirstTimestamp,
+  ]);
 
   // For dynamic alerts timeline, we don't add padding gaps since the dateArray
   // is already calculated to fit the alert data with appropriate padding
@@ -350,8 +415,15 @@ function consolidateAndMergeAlertIntervals(data: Alert) {
   return intervals;
 }
 
-export const createAlertsChartBars = (alert: IncidentsDetailsAlert): AlertsChartBar[] => {
-  const groupedData = consolidateAndMergeAlertIntervals(alert);
+export const createAlertsChartBars = (alerts: Array<Alert>): AlertsChartBar[] => {
+  if (alerts.length === 0) return [];
+
+  const groupedData = consolidateAndMergeAlertIntervals(alerts);
+
+  // Use first interval for identity, last for alertstate
+  const firstAlert = alerts[0];
+  const lastAlert = alerts[alerts.length - 1];
+
   const barChartColorScheme = {
     critical: t_global_color_status_danger_default.var,
     info: t_global_color_status_info_default.var,
@@ -362,22 +434,25 @@ export const createAlertsChartBars = (alert: IncidentsDetailsAlert): AlertsChart
 
   for (let i = 0; i < groupedData.length; i++) {
     const isLastElement = i === groupedData.length - 1;
+    const intervalFirstTimestamp = groupedData[i][3] ?? firstAlert.firstTimestamp;
+
     data.push({
       y0: new Date(groupedData[i][0] * 1000),
       y: new Date(groupedData[i][1] * 1000),
-      x: alert.x,
-      severity: alert.severity[0].toUpperCase() + alert.severity.slice(1),
-      name: alert.alertname,
-      namespace: alert.namespace,
-      layer: alert.layer,
-      component: alert.component,
-      nodata: groupedData[i][2] === 'nodata' ? true : false,
-      alertstate: isLastElement ? alert.alertstate : 'resolved',
-      silenced: alert.silenced,
+      startDate: new Date(intervalFirstTimestamp * 1000),
+      x: firstAlert.x,
+      severity: firstAlert.severity[0].toUpperCase() + firstAlert.severity.slice(1),
+      name: firstAlert.alertname,
+      namespace: firstAlert.namespace,
+      layer: firstAlert.layer,
+      component: firstAlert.component,
+      nodata: groupedData[i][2] === 'nodata',
+      alertstate: isLastElement ? lastAlert.alertstate : 'resolved',
+      silenced: firstAlert.silenced,
       fill:
-        alert.severity === 'critical'
+        firstAlert.severity === 'critical'
           ? barChartColorScheme.critical
-          : alert.severity === 'warning'
+          : firstAlert.severity === 'warning'
           ? barChartColorScheme.warning
           : barChartColorScheme.info,
     });
@@ -424,7 +499,6 @@ export function generateDateArray(days: number, currentTime: number): Array<numb
 
   return dateArray;
 }
-
 /**
  * Generates a dynamic date array based on the actual min/max timestamps from alerts data.
  * This creates a focused timeline that spans only the relevant alert activity period.
@@ -447,6 +521,7 @@ export function generateAlertsDateArray(
     return [now.getTime() / 1000];
   }
 
+  // Find min and max timestamps across all alerts
   let minTimestamp = Infinity;
   let maxTimestamp = -Infinity;
 
@@ -509,7 +584,7 @@ export function generateAlertsDateArray(
  * @param incident - The incident to evaluate
  * @returns Array of severity strings that were maximum severities at some point in time
  */
-function getIncidentMaximumSeveritiesOverTime(incident: Incident): string[] {
+export function getIncidentMaximumSeveritiesOverTime(incident: Incident): string[] {
   const severityRank = { '2': 2, '1': 1, '0': 0 };
   const getSeverityName = (value: string) => {
     return value === '2' ? 'Critical' : value === '1' ? 'Warning' : 'Informative';
@@ -880,4 +955,25 @@ export const getFilterKey = (categoryName: string): string => {
     return 'groupId';
   }
   return categoryName.toLowerCase();
+};
+
+/**
+ * Function to match a timestamp metric for an incident based on the common labels
+ * (group_id, src_alertname, src_namespace, src_severity)
+ * @param incident - The incident to match the timestamp for
+ * @param timestamps - The timestamps to match the incident for
+ * @returns The matched timestamp
+ */
+export const matchTimestampMetricForIncident = (incident: any, timestamps: Array<any>): any => {
+  if (!timestamps || !Array.isArray(timestamps)) {
+    return undefined;
+  }
+  return timestamps.find(
+    (timestamp) =>
+      timestamp.metric.group_id === incident.group_id &&
+      timestamp.metric.src_alertname === incident.src_alertname &&
+      timestamp.metric.src_namespace === incident.src_namespace &&
+      timestamp.metric.component === incident.component &&
+      timestamp.metric.src_severity === incident.src_severity,
+  );
 };

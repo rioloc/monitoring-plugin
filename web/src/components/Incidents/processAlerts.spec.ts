@@ -1,15 +1,16 @@
 import { PrometheusResult } from '@openshift-console/dynamic-plugin-sdk';
 import { convertToAlerts, deduplicateAlerts } from './processAlerts';
 import { Incident } from './model';
-import { getCurrentTime } from './utils';
+import { getCurrentTime, DAY_MS } from './utils';
 
 describe('convertToAlerts', () => {
   const now = getCurrentTime();
   const nowSeconds = Math.floor(now / 1000);
+  const daysSpanMs = 15 * DAY_MS;
 
   describe('edge cases', () => {
     it('should return empty array when no prometheus results provided', () => {
-      const result = convertToAlerts([], [], now);
+      const result = convertToAlerts([], [], now, daysSpanMs);
       expect(result).toEqual([]);
     });
 
@@ -28,7 +29,7 @@ describe('convertToAlerts', () => {
           values: [[nowSeconds, '1']],
         },
       ];
-      const result = convertToAlerts(prometheusResults, [], now);
+      const result = convertToAlerts(prometheusResults, [], now, daysSpanMs);
       expect(result).toEqual([]);
     });
 
@@ -69,7 +70,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       expect(result[0].alertname).toBe('ClusterOperatorDegraded');
     });
@@ -113,7 +114,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       // Should include values within incident time + 30s padding
       // Plus padding points added by insertPaddingPointsForChart
@@ -148,7 +149,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toEqual([]);
     });
   });
@@ -182,7 +183,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
 
       // Verify resolved is determined from ORIGINAL values (before padding)
@@ -226,7 +227,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       expect(result[0].alertsStartFiring).toBeGreaterThan(0);
       expect(result[0].alertsEndFiring).toBeGreaterThan(0);
@@ -268,16 +269,16 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       expect(result[0].alertstate).toBe('resolved');
       expect(result[0].resolved).toBe(true);
     });
 
     it('should mark alert as firing if ended less than 10 minutes ago', () => {
-      const recentTimestamp = nowSeconds - 840; // 14 minutes ago
-      // After padding (+300s), last timestamp will be 9 minutes ago (840-300=540s ago)
-      // which is < 10 minutes, so it should still be firing
+      const recentTimestamp = nowSeconds - 540; // 9 minutes ago
+      // Resolved check is done on original timestamp (before padding)
+      // 9 minutes ago is < 10 minutes, so it should still be firing
 
       const prometheusResults: PrometheusResult[] = [
         {
@@ -304,7 +305,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       expect(result[0].alertstate).toBe('firing');
       expect(result[0].resolved).toBe(false);
@@ -357,7 +358,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(2);
       expect(result[0].alertname).toBe('Alert1'); // Earlier alert first
       expect(result[1].alertname).toBe('Alert2');
@@ -408,7 +409,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(2);
       expect(result[0].x).toBe(2); // Earliest alert has highest x
       expect(result[1].x).toBe(1); // Latest alert has lowest x
@@ -443,7 +444,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       expect(result[0].silenced).toBe(true);
     });
@@ -489,7 +490,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       // Should use the silenced value from the latest timestamp
       expect(result[0].silenced).toBe(true);
@@ -523,7 +524,7 @@ describe('convertToAlerts', () => {
         },
       ];
 
-      const result = convertToAlerts(prometheusResults, incidents, now);
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
       expect(result).toHaveLength(1);
       expect(result[0].alertname).toBe('MyAlert');
       expect(result[0].namespace).toBe('my-namespace');
@@ -531,6 +532,91 @@ describe('convertToAlerts', () => {
       expect(result[0].component).toBe('my-component');
       expect(result[0].layer).toBe('my-layer');
       expect(result[0].name).toBe('my-name');
+    });
+  });
+
+  describe('firstTimestamp from data', () => {
+    it('should use first value of deduplicated interval as firstTimestamp', () => {
+      const alertStart = nowSeconds - 3600; // 1 hour ago
+
+      const prometheusResults: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'TestAlert',
+            namespace: 'test-namespace',
+            severity: 'critical',
+            name: 'test',
+            alertstate: 'firing',
+          },
+          values: [
+            [alertStart, '2'],
+            [alertStart + 300, '2'],
+            [alertStart + 600, '2'],
+          ],
+        },
+      ];
+
+      const incidents: Array<Partial<Incident>> = [
+        {
+          group_id: 'incident1',
+          src_alertname: 'TestAlert',
+          src_namespace: 'test-namespace',
+          src_severity: 'critical',
+          component: 'test-component',
+          layer: 'test-layer',
+          values: [[alertStart, '2']],
+        },
+      ];
+
+      const result = convertToAlerts(prometheusResults, incidents, now, daysSpanMs);
+      expect(result).toHaveLength(1);
+      // firstTimestamp should be the first value of the deduplicated interval
+      expect(result[0].firstTimestamp).toBe(alertStart);
+    });
+
+    it('should preserve firstTimestamp from full data even when values are clipped by N-day window', () => {
+      // Alert started 10 days ago but we're viewing last 3 days
+      const alertStart = nowSeconds - 10 * 86400;
+      const threeDaysAgo = nowSeconds - 3 * 86400;
+      const threeDaysMs = 3 * DAY_MS;
+
+      const prometheusResults: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'TestAlert',
+            namespace: 'test-namespace',
+            severity: 'critical',
+            name: 'test',
+            alertstate: 'firing',
+          },
+          values: [
+            [alertStart, '2'],
+            [alertStart + 300, '2'],
+            [threeDaysAgo + 300, '2'],
+            [nowSeconds, '2'],
+          ],
+        },
+      ];
+
+      const incidents: Array<Partial<Incident>> = [
+        {
+          group_id: 'incident1',
+          src_alertname: 'TestAlert',
+          src_namespace: 'test-namespace',
+          src_severity: 'critical',
+          component: 'test-component',
+          layer: 'test-layer',
+          values: [
+            [alertStart, '2'],
+            [nowSeconds, '2'],
+          ],
+        },
+      ];
+
+      const result = convertToAlerts(prometheusResults, incidents, now, threeDaysMs);
+      expect(result).toHaveLength(1);
+      // firstTimestamp should reflect the real start (10 days ago), not the clipped window
+      expect(result[0].firstTimestamp).toBe(alertStart);
     });
   });
 });
@@ -718,13 +804,202 @@ describe('deduplicateAlerts', () => {
     });
   });
 
+  describe('gap splitting', () => {
+    it('should split alert into two when gap exceeds 5 minutes', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'], // 300s after first (no gap)
+            [2000, '2'], // 700s after second (gap > 300s)
+            [2300, '2'], // 300s after third (no gap)
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([
+        [2000, '2'],
+        [2300, '2'],
+      ]);
+      // Both entries share the same alert identity
+      expect(result[0].metric.alertname).toBe('Alert1');
+      expect(result[1].metric.alertname).toBe('Alert1');
+    });
+
+    it('should split alert into multiple intervals with multiple gaps', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'],
+            [2000, '2'], // gap
+            [3000, '2'], // gap
+            [3300, '2'],
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(3);
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([[2000, '2']]);
+      expect(result[2].values).toEqual([
+        [3000, '2'],
+        [3300, '2'],
+      ]);
+    });
+
+    it('should not split when delta is exactly 300s (no gap)', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'], // exactly 300s
+            [1600, '2'], // exactly 300s
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(1);
+      expect(result[0].values).toHaveLength(3);
+    });
+
+    it('should split when delta is 301s (just over threshold)', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1301, '2'], // 301s gap
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      expect(result[0].values).toEqual([[1000, '2']]);
+      expect(result[1].values).toEqual([[1301, '2']]);
+    });
+
+    it('should split after merging values from multiple alerts with same key', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'],
+          ],
+        },
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [2000, '2'], // gap after merge
+            [2300, '2'],
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([
+        [2000, '2'],
+        [2300, '2'],
+      ]);
+    });
+
+    it('should sort values by timestamp before gap detection', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [2300, '2'],
+            [1000, '2'], // out of order
+            [2000, '2'],
+            [1300, '2'],
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      // Values should be sorted within each interval
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([
+        [2000, '2'],
+        [2300, '2'],
+      ]);
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty array', () => {
       const result = deduplicateAlerts([]);
       expect(result).toEqual([]);
     });
 
-    it('should handle single alert', () => {
+    it('should handle single alert with single value', () => {
       const alerts: PrometheusResult[] = [
         {
           metric: {
@@ -740,7 +1015,8 @@ describe('deduplicateAlerts', () => {
 
       const result = deduplicateAlerts(alerts);
       expect(result).toHaveLength(1);
-      expect(result[0]).toEqual(alerts[0]);
+      expect(result[0].metric).toEqual(alerts[0].metric);
+      expect(result[0].values).toEqual(alerts[0].values);
     });
   });
 });
