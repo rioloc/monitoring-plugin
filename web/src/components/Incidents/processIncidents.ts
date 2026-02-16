@@ -1,13 +1,16 @@
 /* eslint-disable max-len */
 
 import { PrometheusLabels, PrometheusResult } from '@openshift-console/dynamic-plugin-sdk';
-import { Incident, Metric, ProcessedIncident } from './model';
-import { insertPaddingPointsForChart, isResolved, sortByEarliestTimestamp } from './utils';
+import { IncidentsTimestamps, Metric, ProcessedIncident } from './model';
+import { insertPaddingPointsForChart, isResolved, sortByEarliestTimestamp, DAY_MS } from './utils';
 
 /**
  * Converts Prometheus results into processed incidents, filtering out Watchdog incidents.
  * Adds padding points for chart rendering and determines firing/resolved status based on
  * the time elapsed since the last data point.
+ *
+ * Severity-based splitting is handled upstream in getIncidents, which produces separate
+ * entries for each consecutive run of the same severity within a group_id.
  *
  * @param prometheusResults - Array of Prometheus query results containing incident data.
  * @param currentTime - The current time in milliseconds to use for resolved/firing calculations.
@@ -16,13 +19,21 @@ import { insertPaddingPointsForChart, isResolved, sortByEarliestTimestamp } from
 export function convertToIncidents(
   prometheusResults: PrometheusResult[],
   currentTime: number,
+  incidentsTimestamps: IncidentsTimestamps,
 ): ProcessedIncident[] {
   const incidents = getIncidents(prometheusResults).filter(
     (incident) => incident.metric.src_alertname !== 'Watchdog',
   );
   const sortedIncidents = sortByEarliestTimestamp(incidents);
 
-  return sortedIncidents.map((incident, index) => {
+  // Assign x values by unique group_id so that split severity segments share the same x
+  const uniqueGroupIds = [...new Set(sortedIncidents.map((i) => i.metric.group_id))];
+  const groupIdToX = new Map(uniqueGroupIds.map((id, idx) => [id, uniqueGroupIds.length - idx]));
+
+  // Group timestamp entries by group_id and src_severity for firstTimestamp lookup
+  const timestampsByGroupAndSeverity = groupTimestampsByIncidentAndSeverity(incidentsTimestamps);
+
+  const processedIncidents = sortedIncidents.map((incident) => {
     // Determine resolved status based on original values before padding
     const sortedValues = incident.values.sort((a, b) => a[0] - b[0]);
     const lastTimestamp = sortedValues[sortedValues.length - 1][0];
@@ -33,19 +44,125 @@ export function convertToIncidents(
 
     const srcProperties = getSrcProperties(incident.metric);
 
+    // Find the earliest timestamp for this (group_id, src_severity) combination
+    const firstTimestamp = getFirstTimestamp(
+      timestampsByGroupAndSeverity,
+      incident.metric.group_id,
+      incident.metric.src_severity,
+    );
+
     return {
       component: incident.metric.component,
       componentList: incident.metric.componentList,
       group_id: incident.metric.group_id,
       layer: incident.metric.layer,
       values: paddedValues,
-      x: incidents.length - index,
+      x: groupIdToX.get(incident.metric.group_id),
       resolved,
       firing: !resolved,
+      firstTimestamp,
       ...srcProperties,
       metric: incident.metric,
     } as ProcessedIncident;
   });
+
+  // TODO(rioloc) test the case of more incident metrics at same severity
+  // TODO(rioloc) test the case of an alert existing before an incident
+
+  return processedIncidents;
+}
+
+/**
+ * Groups incidentsTimestamps entries by group_id and src_severity.
+ *
+ * Each entry in incidentsTimestamps has:
+ * - metric: { group_id, src_severity, src_alertname, src_namespace, component, ... }
+ * - values: Array<[rounded_timestamp]>
+ *
+ * @param incidentsTimestamps - Array of timestamp metric entries from timestamp(cluster_health_components_map)
+ * @returns A nested Map: group_id -> src_severity -> array of timestamp entries
+ */
+function groupTimestampsByIncidentAndSeverity(
+  incidentsTimestamps: IncidentsTimestamps,
+): Map<string, Map<string, Array<any>>> {
+  const grouped = new Map<string, Map<string, Array<any>>>();
+
+  if (!Array.isArray(incidentsTimestamps)) return grouped;
+
+  for (const entry of incidentsTimestamps) {
+    const groupId = entry.metric?.group_id;
+    const srcSeverity = entry.metric?.src_severity;
+    if (!groupId || !srcSeverity) continue;
+
+    if (!grouped.has(groupId)) {
+      grouped.set(groupId, new Map());
+    }
+
+    const severityMap = grouped.get(groupId);
+    if (!severityMap.has(srcSeverity)) {
+      severityMap.set(srcSeverity, []);
+    }
+
+    severityMap.get(srcSeverity).push(entry);
+  }
+
+  return grouped;
+}
+
+/**
+ * Finds the earliest timestamp for a given (group_id, src_severity) combination
+ * from the grouped timestamps map.
+ *
+ * Each timestamp entry has values: Array<[rounded_timestamp]>.
+ * Returns the minimum across all matching entries' values, or 0 if no match is found.
+ */
+function getFirstTimestamp(
+  timestampsByGroupAndSeverity: Map<string, Map<string, Array<any>>>,
+  groupId: string,
+  srcSeverity: string,
+): number {
+  const entries = timestampsByGroupAndSeverity.get(groupId)?.get(srcSeverity);
+  if (!entries || entries.length === 0) return 0;
+
+  let min = Infinity;
+  for (const entry of entries) {
+    for (const value of entry.values) {
+      if (value[0] < min) {
+        min = value[0];
+      }
+    }
+  }
+
+  return min === Infinity ? 0 : min;
+}
+
+/**
+ * Splits a sorted array of [timestamp, severity] tuples into consecutive segments
+ * where the severity value remains the same. A new segment starts whenever the
+ * severity changes between consecutive data points.
+ *
+ * @param sortedValues - Array of [timestamp, severity] tuples, sorted by timestamp
+ * @returns Array of segments, each containing consecutive values with the same severity
+ */
+function splitBySeverityChange(
+  sortedValues: Array<[number, string]>,
+): Array<Array<[number, string]>> {
+  if (sortedValues.length === 0) return [];
+
+  const segments: Array<Array<[number, string]>> = [];
+  let currentSegment: Array<[number, string]> = [sortedValues[0]];
+
+  for (let i = 1; i < sortedValues.length; i++) {
+    if (sortedValues[i][1] !== sortedValues[i - 1][1]) {
+      segments.push(currentSegment);
+      currentSegment = [sortedValues[i]];
+    } else {
+      currentSegment.push(sortedValues[i]);
+    }
+  }
+
+  segments.push(currentSegment);
+  return segments;
 }
 
 /**
@@ -96,17 +213,35 @@ function getSrcProperties(metric: PrometheusLabels): Partial<Metric> {
  * deduplicates timestamps (keeping only the highest severity per timestamp),
  * and combines components into componentList.
  *
+ * After merging and deduplication, each incident is split into separate entries
+ * when the severity (values[1]) changes between consecutive data points.
+ * This means a single group_id may produce multiple entries if its severity
+ * transitions over time (e.g., from warning '1' to critical '2').
+ *
  * @param prometheusResults - Array of Prometheus query results to convert.
- * @returns Array of incident objects with deduplicated values and combined properties.
+ * @returns Array of incident objects with deduplicated values and combined properties,
+ *          split by severity changes.
  */
 
 export function getIncidents(
   prometheusResults: PrometheusResult[],
 ): Array<PrometheusResult & { metric: Metric }> {
   const incidents = new Map<string, PrometheusResult & { metric: Metric }>();
+  // Track which metric labels correspond to each severity value per group_id
+  // severity value ("0","1","2") -> metric from the Prometheus result that contributed it
+  const severityMetrics = new Map<string, Map<string, PrometheusLabels>>();
 
   for (const result of prometheusResults) {
     const groupId = result.metric.group_id;
+
+    // Track the metric for this result's severity value (skip Watchdog)
+    if (result.values.length > 0 && result.metric.src_alertname !== 'Watchdog') {
+      const severityValue = result.values[0][1]; // constant within a single result
+      if (!severityMetrics.has(groupId)) {
+        severityMetrics.set(groupId, new Map());
+      }
+      severityMetrics.get(groupId).set(severityValue, result.metric);
+    }
 
     const existingIncident = incidents.get(groupId);
 
@@ -151,7 +286,37 @@ export function getIncidents(
     }
   }
 
-  return Array.from(incidents.values());
+  // Split each incident into separate entries when severity (values[1]) changes over time
+  const result: Array<PrometheusResult & { metric: Metric }> = [];
+
+  for (const incident of incidents.values()) {
+    const groupId = incident.metric.group_id;
+    const sortedValues = [...incident.values].sort((a, b) => a[0] - b[0]);
+    const segments = splitBySeverityChange(sortedValues);
+    const groupSeverityMetrics = severityMetrics.get(groupId);
+
+    for (const segmentValues of segments) {
+      const segmentSeverity = segmentValues[0][1]; // uniform within a segment
+      // Use the metric from the Prometheus result that contributed this severity,
+      // preserving shared properties (componentList, silenced) from the merged incident
+      const severitySpecificMetric = groupSeverityMetrics?.get(segmentSeverity);
+
+      result.push({
+        metric: {
+          ...incident.metric,
+          ...(severitySpecificMetric && {
+            src_alertname: severitySpecificMetric.src_alertname,
+            src_namespace: severitySpecificMetric.src_namespace,
+            src_severity: severitySpecificMetric.src_severity,
+            component: severitySpecificMetric.component,
+          }),
+        } as Metric,
+        values: segmentValues,
+      });
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -166,14 +331,13 @@ export const getIncidentsTimeRanges = (
   timespan: number,
   currentTime: number,
 ): Array<{ endTime: number; duration: number }> => {
-  const ONE_DAY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
   const startTime = currentTime - timespan;
-  const timeRanges = [{ endTime: startTime + ONE_DAY, duration: ONE_DAY }];
+  const timeRanges = [{ endTime: startTime + DAY_MS, duration: DAY_MS }];
 
   while (timeRanges[timeRanges.length - 1].endTime < currentTime) {
     const lastRange = timeRanges[timeRanges.length - 1];
-    const nextEndTime = lastRange.endTime + ONE_DAY;
-    timeRanges.push({ endTime: nextEndTime, duration: ONE_DAY });
+    const nextEndTime = lastRange.endTime + DAY_MS;
+    timeRanges.push({ endTime: nextEndTime, duration: DAY_MS });
   }
 
   return timeRanges;
@@ -186,20 +350,21 @@ export const getIncidentsTimeRanges = (
  * @param incidents - Array of Prometheus results containing incident data.
  * @returns Array of partial incident objects with silenced status as boolean and x position.
  */
-export const processIncidentsForAlerts = (
-  incidents: Array<PrometheusResult>,
-): Array<Partial<Incident>> => {
+export const processIncidentsForAlerts = (incidents: Array<PrometheusResult>) => {
   return incidents.map((incident, index) => {
     // Read silenced value from cluster_health_components_map metric label
     // If missing, default to false
     const silenced = incident.metric.silenced === 'true';
 
     // Return the processed incident
-    return {
+    const retval = {
       ...incident.metric,
       values: incident.values,
       x: incidents.length - index,
       silenced,
+      // TODO SET ME
+      firstTimestamp: 0,
     };
+    return retval;
   });
 };

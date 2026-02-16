@@ -37,7 +37,9 @@ import {
   onDeleteIncidentFilterChip,
   onIncidentFiltersSelect,
   parseUrlParams,
+  roundTimestampToFiveMinutes,
   updateBrowserUrl,
+  DAY_MS,
 } from './utils';
 import { groupAlertsForTable, convertToAlerts } from './processAlerts';
 import { CompressArrowsAltIcon, CompressIcon, FilterIcon } from '@patternfly/react-icons';
@@ -46,7 +48,9 @@ import {
   setAlertsAreLoading,
   setAlertsData,
   setAlertsTableData,
+  setAlertsTimestamps,
   setFilteredIncidentsData,
+  setIncidentsTimestamps,
   setIncidentPageFilterType,
   setIncidents,
   setIncidentsActiveFilters,
@@ -146,6 +150,10 @@ const IncidentsPage = () => {
     (state: MonitoringState) => state.plugins.mcp.incidentsData.filteredIncidentsData,
   );
 
+  const incidentsTimestamps = useSelector(
+    (state: MonitoringState) => state.plugins.mcp.incidentsData.incidentsTimestamps,
+  );
+
   const selectedGroupId = incidentsActiveFilters.groupId?.[0] ?? undefined;
 
   const incidentPageFilterTypeSelected = useSelector(
@@ -229,49 +237,78 @@ const IncidentsPage = () => {
   }, [incidentsActiveFilters.days]);
 
   useEffect(() => {
-    (async () => {
-      const currentTime = incidentsLastRefreshTime;
-      Promise.all(
-        timeRanges.map(async (range) => {
-          const response = await fetchDataForIncidentsAndAlerts(
-            safeFetch,
-            range,
-            createAlertsQuery(incidentForAlertProcessing),
-          );
-          return response.data.result;
-        }),
-      )
-        .then((results) => {
-          const prometheusResults = results.flat();
-          const alerts = convertToAlerts(
-            prometheusResults,
-            incidentForAlertProcessing,
-            currentTime,
-          );
+    // Guard: don't process if no incidents selected or timeRanges not ready
+    if (incidentForAlertProcessing.length === 0 || timeRanges.length === 0) {
+      return;
+    }
+
+    const currentTime = incidentsLastRefreshTime;
+
+    // Fetch timestamps and alerts in parallel, but wait for both before processing
+    const timestampPromise = fetchDataForIncidentsAndAlerts(
+      safeFetch,
+      { endTime: currentTime, duration: 15 * DAY_MS },
+      'timestamp(ALERTS{alertstate="firing"})',
+    ).then((res) => res.data.result);
+
+    const alertsPromise = Promise.all(
+      timeRanges.map(async (range) => {
+        const response = await fetchDataForIncidentsAndAlerts(
+          safeFetch,
+          range,
+          createAlertsQuery(incidentForAlertProcessing),
+        );
+        return response.data.result;
+      }),
+    );
+
+    Promise.all([timestampPromise, alertsPromise])
+      .then(([timestampsResults, alertsResults]) => {
+        // Round timestamp values before storing
+        const roundedTimestamps =
+          timestampsResults?.map((result: any) => ({
+            ...result,
+            values: result.values.map((value: any) => [
+              roundTimestampToFiveMinutes(parseInt(value[1])),
+            ]),
+          })) || [];
+
+        dispatch(
+          setAlertsTimestamps({
+            alertsTimestamps: roundedTimestamps,
+          }),
+        );
+
+        const prometheusResults = alertsResults.flat();
+        const alerts = convertToAlerts(
+          prometheusResults,
+          incidentForAlertProcessing,
+          currentTime,
+          roundedTimestamps,
+        );
+        dispatch(
+          setAlertsData({
+            alertsData: alerts,
+          }),
+        );
+        if (rules && alerts) {
           dispatch(
-            setAlertsData({
-              alertsData: alerts,
+            setAlertsTableData({
+              alertsTableData: groupAlertsForTable(alerts, rules),
             }),
           );
-          if (rules && alerts) {
-            dispatch(
-              setAlertsTableData({
-                alertsTableData: groupAlertsForTable(alerts, rules),
-              }),
-            );
-          }
-          if (!isEmpty(filteredData)) {
-            dispatch(setAlertsAreLoading({ alertsAreLoading: false }));
-          } else {
-            dispatch(setAlertsAreLoading({ alertsAreLoading: true }));
-          }
-        })
-        .catch((err) => {
-          // eslint-disable-next-line no-console
-          console.log(err);
-        });
-    })();
-  }, [incidentForAlertProcessing]);
+        }
+        if (!isEmpty(filteredData)) {
+          dispatch(setAlertsAreLoading({ alertsAreLoading: false }));
+        } else {
+          dispatch(setAlertsAreLoading({ alertsAreLoading: true }));
+        }
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error(err);
+      });
+  }, [incidentForAlertProcessing, timeRanges, rules]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -294,30 +331,59 @@ const IncidentsPage = () => {
       ? `cluster_health_components_map{group_id='${selectedGroupId}'}`
       : 'cluster_health_components_map';
 
-    Promise.all(
+    // Fetch timestamps and incidents in parallel, but wait for both before processing
+    const timestampPromise = fetchDataForIncidentsAndAlerts(
+      safeFetch,
+      { endTime: currentTime, duration: 15 * DAY_MS },
+      'timestamp(cluster_health_components_map)',
+    ).then((res) => res.data.result);
+
+    const incidentsPromise = Promise.all(
       calculatedTimeRanges.map(async (range) => {
         const response = await fetchDataForIncidentsAndAlerts(safeFetch, range, incidentsQuery);
         return response.data.result;
       }),
-    )
-      .then((results) => {
-        const prometheusResults = results.flat();
-        const incidents = convertToIncidents(prometheusResults, currentTime);
+    );
+
+    Promise.all([timestampPromise, incidentsPromise])
+      .then(([timestampsResults, incidentsResults]) => {
+        // Round timestamp values before storing
+        const roundedTimestamps =
+          timestampsResults?.map((result: any) => ({
+            ...result,
+            values: result.values.map((value: any) => [
+              roundTimestampToFiveMinutes(parseInt(value[1])),
+            ]),
+          })) || [];
+
+        dispatch(
+          setIncidentsTimestamps({
+            incidentsTimestamps: roundedTimestamps,
+          }),
+        );
+
+        const prometheusResults = incidentsResults.flat();
+        const incidents = convertToIncidents(prometheusResults, currentTime, roundedTimestamps);
 
         // Update the raw, unfiltered incidents state
         dispatch(setIncidents({ incidents }));
 
+        const filteredData = filterIncident(incidentsActiveFilters, incidents);
+
         // Filter the incidents and dispatch
         dispatch(
           setFilteredIncidentsData({
-            filteredIncidentsData: filterIncident(incidentsActiveFilters, incidents),
+            filteredIncidentsData: filteredData,
           }),
         );
 
         setIncidentsAreLoading(false);
 
         if (isGroupSelected) {
-          setIncidentForAlertProcessing(processIncidentsForAlerts(prometheusResults));
+          // Use fetchedTimestamps directly instead of stale closure value
+          setIncidentForAlertProcessing(
+            processIncidentsForAlerts(prometheusResults, roundedTimestamps),
+          );
           dispatch(setAlertsAreLoading({ alertsAreLoading: true }));
         } else {
           closeDropDownFilters();
@@ -638,6 +704,7 @@ const IncidentsPage = () => {
                 <StackItem>
                   <IncidentsChart
                     incidentsData={filteredData}
+                    incidentsTimestamps={incidentsTimestamps}
                     chartDays={timeRanges.length}
                     theme={theme}
                     selectedGroupId={selectedGroupId}
