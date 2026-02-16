@@ -5,8 +5,7 @@ import {
   getIncidentsTimeRanges,
   processIncidentsForAlerts,
 } from './processIncidents';
-import { IncidentsTimestamps } from './model';
-import { getCurrentTime } from './utils';
+import { getCurrentTime, DAY_MS } from './utils';
 
 describe('convertToIncidents', () => {
   const now = getCurrentTime();
@@ -14,7 +13,7 @@ describe('convertToIncidents', () => {
 
   describe('edge cases', () => {
     it('should return empty array when no data provided', () => {
-      const result = convertToIncidents([], now);
+      const result = convertToIncidents([], now, 15 * DAY_MS);
       expect(result).toEqual([]);
     });
 
@@ -44,7 +43,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       expect(result[0].src_alertname).toBe('ClusterOperatorDegraded');
     });
@@ -68,7 +67,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
 
       // Verify resolved is determined from ORIGINAL values (before padding)
@@ -100,7 +99,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       expect(result[0].firing).toBe(true);
       expect(result[0].resolved).toBe(false);
@@ -123,7 +122,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       expect(result[0].firing).toBe(false);
       expect(result[0].resolved).toBe(true);
@@ -146,7 +145,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       expect(result[0].firing).toBe(false); // >= 10 minutes is resolved
       expect(result[0].resolved).toBe(true);
@@ -180,7 +179,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(2);
       expect(result[0].group_id).toBe('incident1'); // Earliest first
       expect(result[1].group_id).toBe('incident2');
@@ -212,7 +211,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(2);
       expect(result[0].x).toBe(2); // Earliest has highest x
       expect(result[1].x).toBe(1); // Latest has lowest x
@@ -235,7 +234,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       expect(result[0].src_alertname).toBe('TestAlert');
       expect(result[0].src_namespace).toBe('test-namespace');
@@ -255,7 +254,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       expect(result[0].src_alertname).toBe('TestAlert');
       // Only src_ properties should be extracted
@@ -281,7 +280,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       // insertPaddingPointsForChart adds a point 5 minutes before and after the point
       // After padding is added because now >= timestamp + 300 (since timestamp = nowSeconds - 600)
@@ -308,7 +307,7 @@ describe('convertToIncidents', () => {
         },
       ];
 
-      const result = convertToIncidents(data, now);
+      const result = convertToIncidents(data, now, 15 * DAY_MS);
       expect(result).toHaveLength(1);
       expect(result[0].component).toBe('test-component');
       // componentList is created by getIncidents
@@ -669,11 +668,6 @@ describe('getIncidentsTimeRanges', () => {
 });
 
 describe('processIncidentsForAlerts', () => {
-  const emptyTimestamps: IncidentsTimestamps = {
-    minOverTime: [],
-    lastOverTime: [],
-  };
-
   describe('silenced status conversion', () => {
     it('should convert silenced "true" string to boolean true', () => {
       const incidents: PrometheusResult[] = [
@@ -686,7 +680,7 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
       expect(result[0].silenced).toBe(true);
     });
@@ -702,7 +696,7 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
       expect(result[0].silenced).toBe(false);
     });
@@ -717,7 +711,7 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
       expect(result[0].silenced).toBe(false);
     });
@@ -733,7 +727,7 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
       expect(result[0].silenced).toBe(false);
     });
@@ -756,7 +750,7 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(3);
       expect(result[0].x).toBe(3);
       expect(result[1].x).toBe(2);
@@ -778,7 +772,7 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
       expect(result[0].group_id).toBe('incident1');
       expect(result[0].component).toBe('test-component');
@@ -799,16 +793,14 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
       expect(result[0].values).toEqual(values);
     });
   });
 
-  describe('timestamp matching', () => {
-    it('should use matched minOverTime timestamp when available', () => {
-      const matchedMinTimestamp = 1704067200; // 2024-01-01 00:00:00 UTC
-
+  describe('firstTimestamp', () => {
+    it('should default firstTimestamp to 0', () => {
       const incidents: PrometheusResult[] = [
         {
           metric: {
@@ -822,225 +814,17 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const incidentsTimestamps: IncidentsTimestamps = {
-        minOverTime: [
-          {
-            metric: {
-              group_id: 'incident1',
-              src_alertname: 'TestAlert',
-              src_namespace: 'test-namespace',
-              component: 'test-component',
-              src_severity: 'critical',
-            },
-            value: [matchedMinTimestamp, matchedMinTimestamp.toString()],
-          },
-        ],
-        lastOverTime: [],
-      };
-
-      const result = processIncidentsForAlerts(incidents, incidentsTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
-      expect(result[0].firstTimestamp).toBe(matchedMinTimestamp);
-    });
-
-    it('should default to 0 when no timestamp match is found', () => {
-      const incidents: PrometheusResult[] = [
-        {
-          metric: {
-            group_id: 'incident1',
-            src_alertname: 'TestAlert',
-            src_namespace: 'test-namespace',
-            component: 'test-component',
-            src_severity: 'critical',
-          },
-          values: [[1704067300, '2']],
-        },
-      ];
-
-      const incidentsTimestamps: IncidentsTimestamps = {
-        minOverTime: [], // No match
-        lastOverTime: [],
-      };
-
-      const result = processIncidentsForAlerts(incidents, incidentsTimestamps);
-      expect(result).toHaveLength(1);
+      // processIncidentsForAlerts sets firstTimestamp to 0;
+      // the real firstTimestamp is computed in convertToAlerts from alert data
       expect(result[0].firstTimestamp).toBe(0);
-    });
-
-    it('should match timestamp based on all required labels', () => {
-      const matchedMinTimestamp = 1704067200;
-
-      const incidents: PrometheusResult[] = [
-        {
-          metric: {
-            group_id: 'incident1',
-            src_alertname: 'TestAlert',
-            src_namespace: 'test-namespace',
-            component: 'test-component',
-            src_severity: 'critical',
-          },
-          values: [[1704067300, '2']],
-        },
-      ];
-
-      const incidentsTimestamps: IncidentsTimestamps = {
-        minOverTime: [
-          {
-            metric: {
-              group_id: 'incident1',
-              src_alertname: 'TestAlert',
-              src_namespace: 'test-namespace',
-              component: 'test-component',
-              src_severity: 'critical',
-            },
-            value: [matchedMinTimestamp, matchedMinTimestamp.toString()],
-          },
-        ],
-        lastOverTime: [],
-      };
-
-      const result = processIncidentsForAlerts(incidents, incidentsTimestamps);
-      expect(result).toHaveLength(1);
-      expect(result[0].firstTimestamp).toBe(matchedMinTimestamp);
-    });
-
-    it('should not match when group_id differs', () => {
-      const incidents: PrometheusResult[] = [
-        {
-          metric: {
-            group_id: 'incident1',
-            src_alertname: 'TestAlert',
-            src_namespace: 'test-namespace',
-            component: 'test-component',
-            src_severity: 'critical',
-          },
-          values: [[1704067300, '2']],
-        },
-      ];
-
-      const incidentsTimestamps: IncidentsTimestamps = {
-        minOverTime: [
-          {
-            metric: {
-              group_id: 'incident2', // Different
-              src_alertname: 'TestAlert',
-              src_namespace: 'test-namespace',
-              component: 'test-component',
-              src_severity: 'critical',
-            },
-            value: [1704067200, '1704067200'],
-          },
-        ],
-        lastOverTime: [],
-      };
-
-      const result = processIncidentsForAlerts(incidents, incidentsTimestamps);
-      expect(result).toHaveLength(1);
-      expect(result[0].firstTimestamp).toBe(0); // No match, defaults to 0
-    });
-
-    it('should not match when component differs', () => {
-      const incidents: PrometheusResult[] = [
-        {
-          metric: {
-            group_id: 'incident1',
-            src_alertname: 'TestAlert',
-            src_namespace: 'test-namespace',
-            component: 'test-component',
-            src_severity: 'critical',
-          },
-          values: [[1704067300, '2']],
-        },
-      ];
-
-      const incidentsTimestamps: IncidentsTimestamps = {
-        minOverTime: [
-          {
-            metric: {
-              group_id: 'incident1',
-              src_alertname: 'TestAlert',
-              src_namespace: 'test-namespace',
-              component: 'other-component', // Different
-              src_severity: 'critical',
-            },
-            value: [1704067200, '1704067200'],
-          },
-        ],
-        lastOverTime: [],
-      };
-
-      const result = processIncidentsForAlerts(incidents, incidentsTimestamps);
-      expect(result).toHaveLength(1);
-      expect(result[0].firstTimestamp).toBe(0); // No match, defaults to 0
-    });
-
-    it('should handle multiple incidents with different timestamps', () => {
-      const matchedTimestamp1 = 1704067200;
-      const matchedTimestamp2 = 1704067500;
-
-      const incidents: PrometheusResult[] = [
-        {
-          metric: {
-            group_id: 'incident1',
-            src_alertname: 'TestAlert1',
-            src_namespace: 'test-namespace',
-            component: 'test-component',
-            src_severity: 'critical',
-          },
-          values: [[1704067300, '2']],
-        },
-        {
-          metric: {
-            group_id: 'incident2',
-            src_alertname: 'TestAlert2',
-            src_namespace: 'test-namespace',
-            component: 'test-component',
-            src_severity: 'warning',
-          },
-          values: [[1704067600, '1']],
-        },
-      ];
-
-      const incidentsTimestamps: IncidentsTimestamps = {
-        minOverTime: [
-          {
-            metric: {
-              group_id: 'incident1',
-              src_alertname: 'TestAlert1',
-              src_namespace: 'test-namespace',
-              component: 'test-component',
-              src_severity: 'critical',
-            },
-            value: [matchedTimestamp1, matchedTimestamp1.toString()],
-          },
-          {
-            metric: {
-              group_id: 'incident2',
-              src_alertname: 'TestAlert2',
-              src_namespace: 'test-namespace',
-              component: 'test-component',
-              src_severity: 'warning',
-            },
-            value: [matchedTimestamp2, matchedTimestamp2.toString()],
-          },
-        ],
-        lastOverTime: [],
-      };
-
-      const result = processIncidentsForAlerts(incidents, incidentsTimestamps);
-      expect(result).toHaveLength(2);
-      expect(result[0].firstTimestamp).toBe(matchedTimestamp1);
-      expect(result[1].firstTimestamp).toBe(matchedTimestamp2);
     });
   });
 
   describe('edge cases', () => {
     it('should handle empty array', () => {
-      const emptyTimestamps: IncidentsTimestamps = {
-        minOverTime: [],
-        lastOverTime: [],
-      };
-      const result = processIncidentsForAlerts([], emptyTimestamps);
+      const result = processIncidentsForAlerts([]);
       expect(result).toEqual([]);
     });
 
@@ -1052,12 +836,7 @@ describe('processIncidentsForAlerts', () => {
         },
       ];
 
-      const emptyTimestamps: IncidentsTimestamps = {
-        minOverTime: [],
-        lastOverTime: [],
-      };
-
-      const result = processIncidentsForAlerts(incidents, emptyTimestamps);
+      const result = processIncidentsForAlerts(incidents);
       expect(result).toHaveLength(1);
       expect(result[0].group_id).toBe('incident1');
       expect(result[0].silenced).toBe(true);
