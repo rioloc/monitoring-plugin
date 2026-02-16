@@ -912,13 +912,202 @@ describe('deduplicateAlerts', () => {
     });
   });
 
+  describe('gap splitting', () => {
+    it('should split alert into two when gap exceeds 5 minutes', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'], // 300s after first (no gap)
+            [2000, '2'], // 700s after second (gap > 300s)
+            [2300, '2'], // 300s after third (no gap)
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([
+        [2000, '2'],
+        [2300, '2'],
+      ]);
+      // Both entries share the same alert identity
+      expect(result[0].metric.alertname).toBe('Alert1');
+      expect(result[1].metric.alertname).toBe('Alert1');
+    });
+
+    it('should split alert into multiple intervals with multiple gaps', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'],
+            [2000, '2'], // gap
+            [3000, '2'], // gap
+            [3300, '2'],
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(3);
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([[2000, '2']]);
+      expect(result[2].values).toEqual([
+        [3000, '2'],
+        [3300, '2'],
+      ]);
+    });
+
+    it('should not split when delta is exactly 300s (no gap)', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'], // exactly 300s
+            [1600, '2'], // exactly 300s
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(1);
+      expect(result[0].values).toHaveLength(3);
+    });
+
+    it('should split when delta is 301s (just over threshold)', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1301, '2'], // 301s gap
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      expect(result[0].values).toEqual([[1000, '2']]);
+      expect(result[1].values).toEqual([[1301, '2']]);
+    });
+
+    it('should split after merging values from multiple alerts with same key', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [1000, '2'],
+            [1300, '2'],
+          ],
+        },
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [2000, '2'], // gap after merge
+            [2300, '2'],
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([
+        [2000, '2'],
+        [2300, '2'],
+      ]);
+    });
+
+    it('should sort values by timestamp before gap detection', () => {
+      const alerts: PrometheusResult[] = [
+        {
+          metric: {
+            alertname: 'Alert1',
+            namespace: 'ns1',
+            component: 'comp1',
+            severity: 'critical',
+            alertstate: 'firing',
+          },
+          values: [
+            [2300, '2'],
+            [1000, '2'], // out of order
+            [2000, '2'],
+            [1300, '2'],
+          ],
+        },
+      ];
+
+      const result = deduplicateAlerts(alerts);
+      expect(result).toHaveLength(2);
+      // Values should be sorted within each interval
+      expect(result[0].values).toEqual([
+        [1000, '2'],
+        [1300, '2'],
+      ]);
+      expect(result[1].values).toEqual([
+        [2000, '2'],
+        [2300, '2'],
+      ]);
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle empty array', () => {
       const result = deduplicateAlerts([]);
       expect(result).toEqual([]);
     });
 
-    it('should handle single alert', () => {
+    it('should handle single alert with single value', () => {
       const alerts: PrometheusResult[] = [
         {
           metric: {
@@ -934,7 +1123,8 @@ describe('deduplicateAlerts', () => {
 
       const result = deduplicateAlerts(alerts);
       expect(result).toHaveLength(1);
-      expect(result[0]).toEqual(alerts[0]);
+      expect(result[0].metric).toEqual(alerts[0].metric);
+      expect(result[0].values).toEqual(alerts[0].values);
     });
   });
 });
