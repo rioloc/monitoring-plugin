@@ -140,6 +140,27 @@ export const DataTestIDs = {
     StateCell: 'incidents-table-state-cell',
   },
 
+  // Incident Aggregation Rules Page Test IDs
+  IncidentRulesPage: {
+    Table: 'incident-rules-table',
+    CreateButton: 'incident-rules-create-button',
+    NameFilter: 'incident-rules-name-filter',
+    LoadingSpinner: 'incident-rules-loading-spinner',
+    EmptyState: 'incident-rules-empty-state',
+    DeleteModal: 'incident-rules-delete-modal',
+  },
+
+  // Incident Rule Form Test IDs
+  IncidentRuleForm: {
+    NameInput: 'incident-rule-form-name',
+    PriorityInput: 'incident-rule-form-priority',
+    WithinInput: 'incident-rule-form-within',
+    ScopeSection: 'incident-rule-form-scope',
+    MatchSection: 'incident-rule-form-match',
+    SubmitButton: 'incident-rule-form-submit',
+    CancelButton: 'incident-rule-form-cancel',
+  },
+
   // Incidents Details Row Table Test IDs
   IncidentsDetailsTable: {
     Table: 'incidents-details-table',

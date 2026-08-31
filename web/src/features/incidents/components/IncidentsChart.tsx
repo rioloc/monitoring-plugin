@@ -187,6 +187,7 @@ const IncidentsChart = ({
 
                     return `${t('Severity')}: ${t(datum.name)}
                     ${t('ID')}: ${datum.group_id}
+                    ${t('Rule')}: ${datum.group_rule || '---'}
                     ${t('Component(s)')}: ${components}
                     ${t('Start')}: ${startDate}
                     ${t('End')}: ${endDate}`;

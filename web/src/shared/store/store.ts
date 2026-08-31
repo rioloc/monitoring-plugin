@@ -51,12 +51,14 @@ export type ObserveState = {
       severity: Array<IncidentSeverityFilters>;
       state: Array<IncidentStateFilters>;
       groupId: Array<string>;
+      groupRule: Array<string>;
     };
     incidentsActiveFilters: {
       days: Array<DaysFilters>;
       severity: Array<IncidentSeverityFilters>;
       state: Array<IncidentStateFilters>;
       groupId: Array<string>;
+      groupRule: Array<string>;
     };
     incidentPageFilterType: string;
     incidentsLastRefreshTime: number | null;
@@ -97,12 +99,14 @@ export const defaultObserveState: ObserveState = {
       severity: ['Critical', 'Warning'],
       state: ['Firing'],
       groupId: [],
+      groupRule: [],
     },
     incidentsActiveFilters: {
       days: [],
       severity: [],
       state: [],
       groupId: [],
+      groupRule: [],
     },
     incidentPageFilterType: 'Severity',
     incidentsLastRefreshTime: null,

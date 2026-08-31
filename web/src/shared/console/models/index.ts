@@ -92,6 +92,20 @@ export const StatefulSetModel = {
   kind: 'StatefulSet',
 };
 
+export const IncidentAggregationRuleModel: K8sModel = {
+  kind: 'IncidentAggregationRule',
+  label: 'IncidentAggregationRule',
+  labelKey: 'IncidentAggregationRule',
+  labelPlural: 'IncidentAggregationRules',
+  labelPluralKey: 'IncidentAggregationRules',
+  apiGroup: 'monitoring.openshift.io',
+  apiVersion: 'v1alpha1',
+  abbr: 'IAR',
+  namespaced: false,
+  crd: true,
+  plural: 'incidentaggregationrules',
+};
+
 export const AgenticRunModel: K8sModel = {
   kind: 'AgenticRun',
   label: 'AgenticRun',

@@ -15,7 +15,7 @@ export const IncidentsTooltip = ({
 }) => {
   const textArray: Array<string> = Array.isArray(text) ? text : [text];
   const posx = x - (x - x0) / 2 - TOOLTIP_MAX_WIDTH / 2;
-  const tooltipHeight = textArray.length === 6 ? 165 : 145;
+  const tooltipHeight = textArray.length >= 6 ? 165 : 145;
   const posy = y - tooltipHeight;
 
   return (

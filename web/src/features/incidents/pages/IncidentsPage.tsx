@@ -7,6 +7,9 @@ import {
   Button,
   Flex,
   FlexItem,
+  Hint,
+  HintBody,
+  Label,
   MenuToggle,
   PageSection,
   Select,
@@ -20,12 +23,17 @@ import {
   ToolbarGroup,
   ToolbarItem,
 } from '@patternfly/react-core';
-import { CompressArrowsAltIcon, CompressIcon, FilterIcon } from '@patternfly/react-icons';
+import {
+  ArrowRightIcon,
+  CompressArrowsAltIcon,
+  CompressIcon,
+  FilterIcon,
+} from '@patternfly/react-icons';
 import { isEmpty } from 'lodash-es';
 import { MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDispatch, useSelector } from 'react-redux';
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 
 import '@/features/incidents/assets/incidents-styles.css';
 import AlertsChart from '@/features/incidents/components/AlertsChart';
@@ -48,6 +56,7 @@ import {
   filterIncident,
   getCurrentTime,
   getIncidentIdOptions,
+  getIncidentRuleOptions,
   onDeleteGroupIncidentFilterChip,
   onDeleteIncidentFilterChip,
   onIncidentFiltersSelect,
@@ -105,6 +114,7 @@ const IncidentsPage = () => {
     severity: false,
     state: false,
     groupId: false,
+    groupRule: false,
   });
 
   const [filterTypeExpanded, setFilterTypeExpanded] = useState({
@@ -152,6 +162,12 @@ const IncidentsPage = () => {
 
   const selectedGroupId = incidentsActiveFilters.groupId?.[0] ?? undefined;
 
+  const selectedGroupRule = useMemo(() => {
+    if (!selectedGroupId || !incidents) return undefined;
+    const incident = incidents.find((i) => i.group_id === selectedGroupId);
+    return incident?.metric?.group_rule as string | undefined;
+  }, [selectedGroupId, incidents]);
+
   const incidentPageFilterTypeSelected = useSelector(
     (state: MonitoringState) => state.plugins.mcp.incidentsData.incidentPageFilterType,
   );
@@ -165,6 +181,7 @@ const IncidentsPage = () => {
       severity: false,
       state: false,
       groupId: false,
+      groupRule: false,
     });
 
     setFilterTypeExpanded({
@@ -183,6 +200,7 @@ const IncidentsPage = () => {
             severity: urlParams.severity ? urlParams.severity : [],
             state: urlParams.state ? urlParams.state : [],
             groupId: urlParams.groupId ? urlParams.groupId : [],
+            groupRule: urlParams.groupRule ? urlParams.groupRule : [],
           },
         }),
       );
@@ -213,6 +231,7 @@ const IncidentsPage = () => {
     incidentsActiveFilters.state,
     incidentsActiveFilters.severity,
     incidentsActiveFilters.groupId,
+    incidentsActiveFilters.groupRule,
   ]);
 
   const safeFetch = useSafeFetch();
@@ -354,6 +373,7 @@ const IncidentsPage = () => {
   const severityOptions = useSeverityOptions();
   const stateOptions = useStateOptions();
   const incidentIdFilterOptions = incidents ? getIncidentIdOptions(incidents, t) : [];
+  const incidentRuleFilterOptions = incidents ? getIncidentRuleOptions(incidents) : [];
 
   useEffect(() => {
     //force a loading state for the alerts chart and table if we filtered out all of the incidents
@@ -460,6 +480,7 @@ const IncidentsPage = () => {
                       severity: [],
                       state: [],
                       groupId: [],
+                      groupRule: [],
                     },
                   }),
                 );
@@ -494,7 +515,7 @@ const IncidentsPage = () => {
                           {t(incidentPageFilterTypeSelected)}
                         </MenuToggle>
                       )}
-                      style={{ width: '145px' }}
+                      style={{ width: '170px' }}
                     >
                       <SelectList data-test={DataTestIDs.IncidentsPage.FiltersSelectList}>
                         <SelectOption
@@ -517,6 +538,13 @@ const IncidentsPage = () => {
                           data-test={`${DataTestIDs.IncidentsPage.FiltersSelectOption}-incident-id`}
                         >
                           {t('Incident ID')}
+                        </SelectOption>
+                        <SelectOption
+                          value="Incident Rule"
+                          isSelected={incidentPageFilterTypeSelected?.includes('Incident Rule')}
+                          data-test={`${DataTestIDs.IncidentsPage.FiltersSelectOption}-rule`}
+                        >
+                          {t('Incident Rule')}
                         </SelectOption>
                       </SelectList>
                     </Select>
@@ -589,6 +617,30 @@ const IncidentsPage = () => {
                       showToolbarItem={incidentPageFilterTypeSelected?.includes('Incident ID')}
                     />
                   </ToolbarItem>
+                  <ToolbarItem
+                    className={
+                      incidentPageFilterTypeSelected !== 'Incident Rule' ? 'pf-m-hidden' : ''
+                    }
+                  >
+                    <IncidentFilterToolbarItem
+                      categoryName="Incident Rule"
+                      toggleLabel={t('Incident Rule filters')}
+                      options={incidentRuleFilterOptions}
+                      incidentsActiveFilters={incidentsActiveFilters}
+                      onDeleteIncidentFilterChip={onDeleteIncidentFilterChip}
+                      onDeleteGroupIncidentFilterChip={onDeleteGroupIncidentFilterChip}
+                      incidentFilterIsExpanded={filtersExpanded.groupRule}
+                      onIncidentFiltersSelect={onIncidentFiltersSelect}
+                      setIncidentIsExpanded={(isExpanded) =>
+                        setFiltersExpanded((prev) => ({ ...prev, groupRule: isExpanded }))
+                      }
+                      onIncidentFilterToggle={(ev) =>
+                        onFilterToggle(ev, 'groupRule', setFiltersExpanded)
+                      }
+                      dispatch={dispatch}
+                      showToolbarItem={incidentPageFilterTypeSelected?.includes('Incident Rule')}
+                    />
+                  </ToolbarItem>
                 </ToolbarGroup>
                 <ToolbarItem align={{ default: 'alignEnd' }}>
                   <Select
@@ -641,6 +693,27 @@ const IncidentsPage = () => {
               </ToolbarContent>
             </Toolbar>
             <Stack hasGutter>
+              {selectedGroupId && selectedGroupRule && (
+                <StackItem>
+                  <Hint>
+                    <HintBody>
+                      <Flex
+                        spaceItems={{ default: 'spaceItemsSm' }}
+                        alignItems={{ default: 'alignItemsCenter' }}
+                      >
+                        <FlexItem>{t('Grouped by')}</FlexItem>
+                        <FlexItem>
+                          <Link to={`/monitoring/aggregation-rules/${selectedGroupRule}`}>
+                            <Label color="blue" isCompact icon={<ArrowRightIcon />}>
+                              {selectedGroupRule}
+                            </Label>
+                          </Link>
+                        </FlexItem>
+                      </Flex>
+                    </HintBody>
+                  </Hint>
+                </StackItem>
+              )}
               <StackItem>
                 <Flex justifyContent={{ default: 'justifyContentFlexEnd' }}>
                   <FlexItem>

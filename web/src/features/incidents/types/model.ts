@@ -70,6 +70,7 @@ export type IncidentFilterSelectionCombined =
 export type IncidentFiltersCombined = {
   days: Array<DaysFilters>;
   groupId?: Array<string>;
+  groupRule?: Array<string>;
   severity?: Array<IncidentSeverityFilters>;
   state?: Array<IncidentStateFilters>;
 };
@@ -78,6 +79,7 @@ export type IncidentsPageFiltersExpandedState = {
   severity: boolean;
   state: boolean;
   groupId: boolean;
+  groupRule: boolean;
 };
 
 export type GroupedAlert = {
