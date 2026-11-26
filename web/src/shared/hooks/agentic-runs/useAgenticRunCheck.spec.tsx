@@ -34,8 +34,11 @@ const createWrapper = () => {
 };
 
 // Alert without a `namespace` label so only the default-namespace query runs.
-const alert = { labels: { alertname: 'Watchdog' } } as unknown as Alert;
-const fingerprint = getAlertFingerprintPrefix(alert.labels);
+const alert = {
+  labels: { alertname: 'Watchdog' },
+  rule: { sourceId: 'platform' },
+} as unknown as Alert;
+const fingerprint = getAlertFingerprintPrefix(alert);
 
 const run = (
   name: string,

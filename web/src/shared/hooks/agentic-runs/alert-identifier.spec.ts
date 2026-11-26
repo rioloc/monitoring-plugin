@@ -2,6 +2,7 @@ import { Alert, AlertStates, K8sResourceCommon } from '@openshift-console/dynami
 
 import {
   getAlertFingerprintPrefix,
+  getAlertmanagerFingerprint,
   matchesAgenticRun,
 } from '@/shared/hooks/agentic-runs/alert-identifier';
 import { computeAlertFingerprint } from '@/shared/utils/alerts/alert-fingerprint';
@@ -24,11 +25,44 @@ const makeAgenticRun = (labels: Record<string, string>): K8sResourceCommon => ({
   },
 });
 
+describe('getAlertmanagerFingerprint', () => {
+  it('matches the Alertmanager fingerprint for a platform alert without mutating its labels', () => {
+    const alert = makeAlert({
+      alertname: 'ClusterVersionOperatorDown',
+      namespace: 'openshift-cluster-version',
+      prometheus: 'openshift-monitoring/k8s',
+      severity: 'critical',
+    });
+    alert.rule.labels = { prometheus: 'openshift-monitoring/k8s' };
+    const originalLabels = { ...alert.labels };
+
+    expect(getAlertmanagerFingerprint(alert)).toBe('2791febb43f8cde6');
+    expect(getAlertFingerprintPrefix(alert)).toBe('2791febb');
+    expect(alert.labels).toEqual(originalLabels);
+  });
+
+  it('uses the user source from the rule', () => {
+    const alert = makeAlert({ namespace: 'my-app' });
+    alert.rule.sourceId = 'user';
+
+    expect(getAlertmanagerFingerprint(alert)).toBe(
+      computeAlertFingerprint({ ...alert.labels, openshift_io_alert_source: 'user' }),
+    );
+  });
+
+  it('preserves an existing source label over the inferred source', () => {
+    const alert = makeAlert({ openshift_io_alert_source: 'platform' });
+    alert.rule.sourceId = 'user';
+
+    expect(getAlertmanagerFingerprint(alert)).toBe(computeAlertFingerprint(alert.labels));
+  });
+});
+
 describe('getAlertFingerprintPrefix', () => {
-  it('returns the first 8 characters of the fingerprint', () => {
-    const labels = { alertname: 'TestAlert' };
-    const fp = computeAlertFingerprint(labels);
-    const prefix = getAlertFingerprintPrefix(labels);
+  it('returns the first 8 characters of the Alertmanager fingerprint', () => {
+    const alert = makeAlert({});
+    const fp = getAlertmanagerFingerprint(alert);
+    const prefix = getAlertFingerprintPrefix(alert);
     expect(prefix).toHaveLength(8);
     expect(fp.startsWith(prefix)).toBe(true);
   });
@@ -37,7 +71,7 @@ describe('getAlertFingerprintPrefix', () => {
 describe('matchesProposal', () => {
   it('matches by fingerprint prefix', () => {
     const alert = makeAlert({ severity: 'critical' });
-    const fp8 = getAlertFingerprintPrefix(alert.labels);
+    const fp8 = getAlertFingerprintPrefix(alert);
     const proposal = makeAgenticRun({
       'agentic.openshift.io/alert-fingerprint': fp8,
       'agentic.openshift.io/source': 'alertmanager',

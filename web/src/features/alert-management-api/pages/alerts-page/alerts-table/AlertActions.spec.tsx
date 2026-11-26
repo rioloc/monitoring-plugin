@@ -221,7 +221,7 @@ it('shows an investigation returned by the SDK using the real agentic run hook',
   >('@/shared/hooks/agentic-runs/useAgenticRunCheck');
   check.mockImplementation(useAgenticRunCheck);
 
-  const fingerprint = getAlertFingerprintPrefix(alert.labels);
+  const fingerprint = getAlertFingerprintPrefix(alert);
   const run: K8sResourceCommon = {
     metadata: {
       name: 'sdk-investigation',

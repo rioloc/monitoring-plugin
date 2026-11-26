@@ -56,7 +56,7 @@ const AlertTableRow: FC<{ alert: Alert }> = ({ alert }) => {
     investigate,
     isSubmitting: isInvestigating,
     isAvailable: canInvestigate,
-  } = useInvestigateAlert(alert.labels ?? {});
+  } = useInvestigateAlert(alert);
 
   const title: string = alert.annotations?.description || alert.annotations?.message;
 

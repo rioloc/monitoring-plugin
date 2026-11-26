@@ -1,9 +1,9 @@
-import { consoleFetchJSON, useToast } from '@openshift-console/dynamic-plugin-sdk';
+import { Alert, consoleFetchJSON, useToast } from '@openshift-console/dynamic-plugin-sdk';
 import { AlertVariant } from '@patternfly/react-core';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { computeAlertFingerprint } from '@/shared/utils/alerts/alert-fingerprint';
+import { getAlertmanagerFingerprint } from '@/shared/hooks/agentic-runs/alert-identifier';
 
 export const INVESTIGATIONS_URL =
   '/api/proxy/plugin/lightspeed-agentic-console-plugin/alerts-adapter/api/v1/investigations';
@@ -19,14 +19,14 @@ type InvestigationError = { error?: { code?: string; message?: string } };
  * Triggers an on-demand AI investigation (AgenticRun) for an alert via the
  * Lightspeed alerts adapter exposed through the console plugin proxy.
  */
-export const useInvestigateAlert = (labels: Record<string, string>) => {
+export const useInvestigateAlert = (alert: Alert) => {
   const { t } = useTranslation(process.env.I18N_NAMESPACE);
   const { addToast } = useToast();
   const [isSubmitting, setSubmitting] = useState(false);
   const [isAvailable, setAvailable] = useState(!adapterUnavailable);
 
   const investigate = useCallback(async () => {
-    const fingerprint = computeAlertFingerprint(labels);
+    const fingerprint = getAlertmanagerFingerprint(alert);
     if (adapterUnavailable || fingerprintsInFlight.has(fingerprint)) {
       return;
     }
@@ -69,7 +69,7 @@ export const useInvestigateAlert = (labels: Record<string, string>) => {
       fingerprintsInFlight.delete(fingerprint);
       setSubmitting(false);
     }
-  }, [labels, t, addToast]);
+  }, [alert, t, addToast]);
 
   return { investigate, isSubmitting, isAvailable };
 };

@@ -38,7 +38,7 @@ export function AlertActions({ alert }: { alert: ManagedAlert }) {
     investigate,
     isSubmitting: isInvestigating,
     isAvailable: canInvestigate,
-  } = useInvestigateAlert(alert.labels);
+  } = useInvestigateAlert(alert);
   const run = hasAgenticRun ? agenticRuns[0] : undefined;
   const { navigateToSilence } = useSilenceAlertNavigation();
 

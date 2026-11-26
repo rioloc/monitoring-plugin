@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
 
+import type { Alert } from '@openshift-console/dynamic-plugin-sdk';
 import { renderHook, waitFor } from '@testing-library/react';
 import { act } from 'react';
 
@@ -22,7 +23,15 @@ const loadHook = async () => {
     .useInvestigateAlert as typeof UseInvestigateAlert;
 };
 
-const labels = { alertname: 'Watchdog' };
+const alert = {
+  labels: {
+    alertname: 'ClusterVersionOperatorDown',
+    namespace: 'openshift-cluster-version',
+    prometheus: 'openshift-monitoring/k8s',
+    severity: 'critical',
+  },
+  rule: { sourceId: 'platform' },
+} as unknown as Alert;
 const investigationError = (code: number, body?: object) => ({
   code,
   json: body,
@@ -33,15 +42,15 @@ describe('useInvestigateAlert', () => {
     vi.clearAllMocks();
   });
 
-  it('posts the alert fingerprint and shows a success toast', async () => {
+  it('posts the Alertmanager fingerprint including source and shows a success toast', async () => {
     mocks.post.mockResolvedValue({ namespace: 'ns', name: 'run-1' });
     const useInvestigateAlert = await loadHook();
 
-    const { result } = renderHook(() => useInvestigateAlert(labels));
+    const { result } = renderHook(() => useInvestigateAlert(alert));
     await act(() => result.current.investigate());
 
     expect(mocks.post).toHaveBeenCalledWith(expect.any(String), {
-      fingerprint: expect.any(String),
+      fingerprint: '2791febb43f8cde6',
     });
     expect(mocks.addToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Investigation started' }),
@@ -57,7 +66,7 @@ describe('useInvestigateAlert', () => {
     );
     const useInvestigateAlert = await loadHook();
 
-    const { result } = renderHook(() => useInvestigateAlert(labels));
+    const { result } = renderHook(() => useInvestigateAlert(alert));
     await act(() => result.current.investigate());
 
     const toast = mocks.addToast.mock.calls[0][0];
@@ -74,7 +83,7 @@ describe('useInvestigateAlert', () => {
 
     const useInvestigateAlert = await loadHook();
 
-    const { result } = renderHook(() => useInvestigateAlert(labels));
+    const { result } = renderHook(() => useInvestigateAlert(alert));
     await act(() => result.current.investigate());
 
     const toast = mocks.addToast.mock.calls[0][0];
@@ -86,7 +95,7 @@ describe('useInvestigateAlert', () => {
     mocks.post.mockRejectedValue(investigationError(500, { error: { code: 'internal_error' } }));
     const useInvestigateAlert = await loadHook();
 
-    const { result } = renderHook(() => useInvestigateAlert(labels));
+    const { result } = renderHook(() => useInvestigateAlert(alert));
     await act(() => result.current.investigate());
 
     expect(mocks.addToast.mock.calls[0][0].content).toBe('Failed to start the AI investigation');
@@ -96,14 +105,14 @@ describe('useInvestigateAlert', () => {
     mocks.post.mockRejectedValue(investigationError(404));
     const useInvestigateAlert = await loadHook();
 
-    const { result } = renderHook(() => useInvestigateAlert(labels));
+    const { result } = renderHook(() => useInvestigateAlert(alert));
     await act(() => result.current.investigate());
 
     expect(mocks.addToast).not.toHaveBeenCalled();
     await waitFor(() => expect(result.current.isAvailable).toBe(false));
 
     // A newly mounted hook inherits the cached unavailability.
-    const second = renderHook(() => useInvestigateAlert(labels));
+    const second = renderHook(() => useInvestigateAlert(alert));
     expect(second.result.current.isAvailable).toBe(false);
   });
 
@@ -117,7 +126,7 @@ describe('useInvestigateAlert', () => {
 
     const useInvestigateAlert = await loadHook();
 
-    const { result } = renderHook(() => useInvestigateAlert(labels));
+    const { result } = renderHook(() => useInvestigateAlert(alert));
     const first = act(() => result.current.investigate());
     await act(() => result.current.investigate());
 
