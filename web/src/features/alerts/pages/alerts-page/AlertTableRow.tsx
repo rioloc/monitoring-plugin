@@ -32,6 +32,7 @@ import KebabDropdown from '@/shared/components/KebabDropdown';
 import { SeverityBadge } from '@/shared/components/SeverityBadge';
 import { DataTestIDs } from '@/shared/constants/data-test';
 import { useAgenticRunCheck } from '@/shared/hooks/agentic-runs/useAgenticRunCheck';
+import { useInvestigateAlert } from '@/shared/hooks/agentic-runs/useInvestigateAlert';
 import { useMonitoringNamespace } from '@/shared/hooks/useMonitoringNamespace';
 import {
   getAgenticRunUrl,
@@ -51,6 +52,11 @@ const AlertTableRow: FC<{ alert: Alert }> = ({ alert }) => {
   const { namespace } = useMonitoringNamespace();
   const state = alertState(alert);
   const { agenticRuns, hasAgenticRun, prefetch, isFetching } = useAgenticRunCheck(alert);
+  const {
+    investigate,
+    isSubmitting: isInvestigating,
+    isAvailable: canInvestigate,
+  } = useInvestigateAlert(alert.labels ?? {});
 
   const title: string = alert.annotations?.description || alert.annotations?.message;
 
@@ -103,6 +109,18 @@ const AlertTableRow: FC<{ alert: Alert }> = ({ alert }) => {
         isDisabled
       >
         <Spinner size="sm" /> {t('Loading investigations...')}
+      </DropdownItem>,
+    );
+  } else if (canInvestigate) {
+    dropdownItems.push(
+      <DropdownItem
+        key="investigate-with-ai"
+        icon={<CustomIcon name="ai-experience" />}
+        isDisabled={isInvestigating}
+        onClick={() => void investigate()}
+        data-test={DataTestIDs.InvestigateWithAIDropdownItem}
+      >
+        {t('Investigate with AI')}
       </DropdownItem>,
     );
   }

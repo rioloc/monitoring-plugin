@@ -87,6 +87,7 @@ export const DataTestIDs = {
   SeverityBadgeHeader: 'severity-badge-header',
   SeverityBadge: 'severity-badge',
   SilenceAlertDropdownItem: 'silence-alert-dropdown-item',
+  InvestigateWithAIDropdownItem: 'investigate-with-ai-dropdown-item',
   ViewAIInvestigationDropdownItem: 'view-ai-investigation-dropdown-item',
   SilenceButton: 'silence-button',
   SilenceEditDropdownItem: 'silence-edit-dropdown-item',

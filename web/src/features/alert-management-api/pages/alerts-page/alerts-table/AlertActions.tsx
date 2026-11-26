@@ -22,6 +22,7 @@ import CustomIcon from '@/shared/components/CustomIcon';
 import KebabDropdown from '@/shared/components/KebabDropdown';
 import { DataTestIDs } from '@/shared/constants/data-test';
 import { useAgenticRunCheck } from '@/shared/hooks/agentic-runs/useAgenticRunCheck';
+import { useInvestigateAlert } from '@/shared/hooks/agentic-runs/useInvestigateAlert';
 import { useMonitoring } from '@/shared/hooks/useMonitoring';
 import { getAgenticRunUrl, getQueryBrowserUrl } from '@/shared/hooks/usePerspective';
 
@@ -33,6 +34,11 @@ export function AlertActions({ alert }: { alert: ManagedAlert }) {
   const name = alert.labels.alertname ?? alert.rule.name;
 
   const { agenticRuns, hasAgenticRun, prefetch, isFetching } = useAgenticRunCheck(alert);
+  const {
+    investigate,
+    isSubmitting: isInvestigating,
+    isAvailable: canInvestigate,
+  } = useInvestigateAlert(alert.labels);
   const run = hasAgenticRun ? agenticRuns[0] : undefined;
   const { navigateToSilence } = useSilenceAlertNavigation();
 
@@ -127,6 +133,18 @@ export function AlertActions({ alert }: { alert: ManagedAlert }) {
         isDisabled
       >
         <Spinner size="sm" /> {t('Loading investigations...')}
+      </DropdownItem>,
+    );
+  } else if (canInvestigate) {
+    dropdownItems.push(
+      <DropdownItem
+        key="investigate-with-ai"
+        icon={<CustomIcon name="ai-experience" />}
+        isDisabled={isInvestigating}
+        onClick={() => void investigate()}
+        data-test={DataTestIDs.InvestigateWithAIDropdownItem}
+      >
+        {t('Investigate with AI')}
       </DropdownItem>,
     );
   }
