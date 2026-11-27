@@ -36,7 +36,7 @@ const buildQueryFn = (namespace: string, alertFingerprint: string) => () => {
 };
 
 export const useAgenticRunCheck = (alert: Alert) => {
-  const alertFingerprint = useMemo(() => getAlertFingerprintPrefix(alert.labels), [alert.labels]);
+  const alertFingerprint = useMemo(() => getAlertFingerprintPrefix(alert), [alert]);
   const alertNamespace = alert.labels?.namespace;
   const hasDistinctAlertNamespace = !!alertNamespace && alertNamespace !== AGENTIC_RUN_NAMESPACE;
   const [shouldFetch, setShouldFetch] = useState(false);

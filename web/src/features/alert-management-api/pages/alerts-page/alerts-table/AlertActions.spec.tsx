@@ -39,6 +39,7 @@ vi.mock('@openshift-console/dynamic-plugin-sdk', async () => ({
   k8sListItems,
   useAccessReview: accessReview,
   useActiveNamespace: () => ['#ALL_NS#', setNamespace],
+  useToast: () => ({ addToast: vi.fn() }),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -85,6 +86,7 @@ it('offers only the implemented actions when no AI actions are available', async
     'Silence alertTemporarily stop notifications for this alert.',
     'View alert rule',
     'View metrics',
+    'Investigate with AI',
   ]);
   expect(actionService).toHaveBeenCalledWith({ 'monitoring-alert-list-item': { alert } });
   expect(check).toHaveBeenCalledWith(alert);
@@ -219,7 +221,7 @@ it('shows an investigation returned by the SDK using the real agentic run hook',
   >('@/shared/hooks/agentic-runs/useAgenticRunCheck');
   check.mockImplementation(useAgenticRunCheck);
 
-  const fingerprint = getAlertFingerprintPrefix(alert.labels);
+  const fingerprint = getAlertFingerprintPrefix(alert);
   const run: K8sResourceCommon = {
     metadata: {
       name: 'sdk-investigation',
@@ -273,7 +275,7 @@ it('shows an investigation returned by the SDK using the real agentic run hook',
 it('uses the existing alert action extension for AI investigation', async () => {
   const investigate = vi.fn();
   const actions: Action[] = [
-    { id: 'investigate', label: 'Investigate with AI', cta: investigate },
+    { id: 'investigate', label: 'Extension investigation', cta: investigate },
     { id: 'external', label: 'External investigation', cta: { href: '/investigation' } },
   ];
   actionService.mockReturnValue({ actions, loaded: true });
@@ -281,7 +283,7 @@ it('uses the existing alert action extension for AI investigation', async () => 
   expect(
     screen.getByRole('menuitem', { name: 'External investigation' }).getAttribute('href'),
   ).toBe('/investigation');
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Investigate with AI' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Extension investigation' }));
   expect(investigate).toHaveBeenCalledOnce();
 });
 
@@ -351,15 +353,16 @@ it('hides silencing and its separator for an already silenced alert without chec
   expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
     'View alert rule',
     'View metrics',
+    'Investigate with AI',
   ]);
   expect(accessReview).not.toHaveBeenCalled();
 });
 
 it('does not show extension actions until they are loaded', async () => {
   actionService.mockReturnValue({
-    actions: [{ id: 'investigate', label: 'Investigate with AI', cta: vi.fn() }],
+    actions: [{ id: 'investigate', label: 'Extension investigation', cta: vi.fn() }],
     loaded: false,
   });
   await renderActions();
-  expect(screen.queryByRole('menuitem', { name: 'Investigate with AI' })).toBeNull();
+  expect(screen.queryByRole('menuitem', { name: 'Extension investigation' })).toBeNull();
 });
